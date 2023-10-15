@@ -6,5 +6,7 @@ __all__ = ["np", "plt"]
 
 input = np.fromfile(here/"input.bin", dtype = "float32")
 __all__.append("input")
+black_level = np.fromfile(here/"black_level.bin", dtype = "float32")
+__all__.append("black_level")
 output = np.fromfile(here/"output.bin", dtype = "float32")
 __all__.append("output")

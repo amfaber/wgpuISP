@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use gpwgpu::{automatic_buffers::{AllOperations, register}, ExpansionError, wgpu::{Device, Queue}};
 
-use crate::operations::{Buffers, Debayer};
+use crate::operations::{Buffers, Debayer, BlackLevelParams, DebayerParams, BlackLevel};
 
 
 
@@ -15,12 +15,18 @@ pub trait InputType: Sized + std::fmt::Debug + 'static{
 impl InputType for u16{
 }
 
-
+#[derive(Debug)]
+pub struct ISPParams{
+    pub debayer: DebayerParams,
+    pub black_level: BlackLevelParams,
+}
 
 #[derive(Debug)]
 pub struct Params<I: InputType>{
     pub width: i32,
     pub height: i32,
+
+    pub isp: ISPParams,
 
     pub phan: PhantomData<I>
 }
@@ -39,7 +45,7 @@ pub struct State<'a, I: InputType>{
     pub device: &'a Device,
     pub queue: &'a Queue,
     pub params: Params<I>,
-    pub sequential: AllOperations<Params<I>, Buffers, StateError, ()>,
+    pub sequential: AllOperations<Params<I>, Buffers, StateError, Params<I>>,
 }
 
 impl<'a, I: InputType> State<'a, I>{
@@ -47,6 +53,7 @@ impl<'a, I: InputType> State<'a, I>{
 
 
         let operations = vec![
+            register::<BlackLevel<I>>(),
             register::<Debayer<I>>(),
         ];
         

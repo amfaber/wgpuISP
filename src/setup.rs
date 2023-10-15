@@ -17,6 +17,7 @@ impl InputType for u16{
 
 
 
+#[derive(Debug)]
 pub struct Params<I: InputType>{
     pub width: i32,
     pub height: i32,
@@ -25,8 +26,9 @@ pub struct Params<I: InputType>{
 }
 
 impl<I: InputType> Params<I>{
+    
     pub fn byte_size(&self) -> i32{
-        self.width * self.height * std::mem::size_of::<I>() as i32
+        self.width * self.height * std::mem::size_of::<f32>() as i32
     }
 
 }

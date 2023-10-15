@@ -322,49 +322,13 @@ dependencies = [
 [[package]]
 name = "gpwgpu"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eed91397ac5bb57988588c5c36f519ffaca22904f8ac6d85f88ac58b114eb560"
 dependencies = [
  "bincode",
  "bytemuck",
- "gpwgpu_core",
- "gpwgpu_macros",
+ "macros",
+ "my-core",
  "once_cell",
- "wgpu",
-]
-
-[[package]]
-name = "gpwgpu_core"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8f7ff95c1c805bf19e0ebf9e4d7f08f80cc6e8a991279e2919362996ab29819"
-dependencies = [
- "bincode",
- "bytemuck",
- "nom",
- "nom-supreme",
- "once_cell",
- "quote",
- "regex",
- "serde",
- "slow_primes",
- "syn",
- "thiserror",
- "wgpu",
-]
-
-[[package]]
-name = "gpwgpu_macros"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ada663c0c2b2c3856a4aae92b0b4479c766f005eb32f5ecbb853745f8a25f568"
-dependencies = [
- "bincode",
- "gpwgpu_core",
- "proc-macro2",
- "quote",
- "rust-format",
- "syn",
+ "pollster",
  "wgpu",
 ]
 
@@ -490,6 +454,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
 
 [[package]]
+name = "macros"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "my-core",
+ "proc-macro2",
+ "quote",
+ "rust-format",
+ "syn",
+ "wgpu",
+]
+
+[[package]]
 name = "malloc_buf"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -531,6 +508,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7810e0be55b428ada41041c41f32c9f1a42817901b4ccf45fa3d4b6561e74c7"
 dependencies = [
  "adler",
+]
+
+[[package]]
+name = "my-core"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "bytemuck",
+ "nom",
+ "nom-supreme",
+ "once_cell",
+ "quote",
+ "regex",
+ "serde",
+ "slow_primes",
+ "syn",
+ "thiserror",
+ "wgpu",
 ]
 
 [[package]]
@@ -714,6 +709,12 @@ name = "pkg-config"
 version = "0.3.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26072860ba924cbfa98ea39c8c19b4dd6a4a25423dbdf219c1eca91aa0cf6964"
+
+[[package]]
+name = "pollster"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22686f4785f02a4fcc856d3b3bb19bf6c8160d103f7a99cc258bddd0251dc7f2"
 
 [[package]]
 name = "proc-macro2"

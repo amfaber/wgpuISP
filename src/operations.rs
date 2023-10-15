@@ -1,49 +1,54 @@
 use std::marker::PhantomData;
 
-use gpwgpu::{automatic_buffers::{SequentialOperation, AbstractBuffer, MemoryReq}, wgpu::BufferUsages, parse_shaders_dyn, shaderpreprocessor::ShaderSpecs, ExpansionError};
+use gpwgpu::{
+    automatic_buffers::{AbstractBuffer, MemoryReq, SequentialOperation},
+    parse_shaders_dyn,
+    shaderpreprocessor::ShaderSpecs,
+    utils::FullComputePass,
+    wgpu::BufferUsages,
+    ExpansionError,
+};
 
-use crate::setup::{Params, InputType};
+use crate::setup::{InputType, Params};
 
 parse_shaders_dyn!(SHADERS, "src/shaders");
 
-
 #[derive(Hash, Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Buffers{
+pub enum Buffers {
     Bayered,
     Debayered,
 }
 
-impl Buffers{
-    fn init<I: InputType>(self, params: &Params<I>) -> AbstractBuffer<Self>{
+impl Buffers {
+    fn init<I: InputType>(self, params: &Params<I>) -> AbstractBuffer<Self> {
         let name = self;
-        match self{
-            Buffers::Bayered => AbstractBuffer{
+        match self {
+            Buffers::Bayered => AbstractBuffer {
                 name,
                 memory_req: MemoryReq::Strict,
-                usage: BufferUsages::MAP_WRITE | BufferUsages::STORAGE | BufferUsages::COPY_DST,
+                usage: BufferUsages::MAP_WRITE
+                    | BufferUsages::STORAGE
+                    | BufferUsages::COPY_DST
+                    | BufferUsages::COPY_SRC,
                 size: params.byte_size() as u64,
             },
-            Buffers::Debayered => AbstractBuffer{
+            Buffers::Debayered => AbstractBuffer {
                 name,
                 memory_req: MemoryReq::Strict,
-                usage: BufferUsages::MAP_READ | BufferUsages::STORAGE | BufferUsages::COPY_DST,
-                size: params.byte_size() as u64,
+                usage: BufferUsages::MAP_READ | BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+                size: (params.byte_size() * 4) as u64,
             },
         }
     }
 }
 
-
-
 #[derive(Debug)]
-pub struct Debayer<I: InputType>{
-
-    phan: PhantomData<I>
+pub struct Debayer<I: InputType> {
+    pass: FullComputePass,
+    phan: PhantomData<I>,
 }
 
-
-
-impl<I: InputType> SequentialOperation for Debayer<I>{
+impl<I: InputType> SequentialOperation for Debayer<I> {
     type Params = Params<I>;
 
     type BufferEnum = Buffers;
@@ -54,13 +59,17 @@ impl<I: InputType> SequentialOperation for Debayer<I>{
 
     fn enabled(_params: &Self::Params) -> bool
     where
-        Self: Sized {
+        Self: Sized,
+    {
         true
     }
 
-    fn buffers(params: &Self::Params) -> Vec<gpwgpu::automatic_buffers::AbstractBuffer<Self::BufferEnum>>
+    fn buffers(
+        params: &Self::Params,
+    ) -> Vec<gpwgpu::automatic_buffers::AbstractBuffer<Self::BufferEnum>>
     where
-        Self: Sized {
+        Self: Sized,
+    {
         vec![
             Buffers::Bayered.init(params),
             Buffers::Debayered.init(params),
@@ -68,31 +77,47 @@ impl<I: InputType> SequentialOperation for Debayer<I>{
     }
 
     fn create(
-        _device: &gpwgpu::wgpu::Device,
-        _params: &Self::Params,
-        _buffers: &gpwgpu::automatic_buffers::BufferSolution<Self::BufferEnum>,
+        device: &gpwgpu::wgpu::Device,
+        params: &Self::Params,
+        buffers: &gpwgpu::automatic_buffers::BufferSolution<Self::BufferEnum>,
     ) -> Result<Self, Self::Error>
     where
-        Self: Sized {
+        Self: Sized,
+    {
+        let bayered = buffers.get::<Self>(Buffers::Bayered);
+        let debayered = buffers.get::<Self>(Buffers::Debayered);
 
-        let specs = ShaderSpecs::new((16, 16, 1))
+        let dispatch_size = [params.height as u32, params.width as u32, 1];
+
+        let specs = ShaderSpecs::new((8, 32, 1))
+            .direct_dispatcher(&dispatch_size)
             .extend_defs([
                 ("TY", I::wgsl_type().into()),
-                // ("TY", I::wgsl_type().into()),
+                ("HEIGHT", params.height.into()),
+                ("WIDTH", params.width.into()),
+                ("PADDING", 2.into()),
             ]);
+
         let shader = SHADERS.process_by_name("debayer", specs)?;
 
-        dbg!(&shader);
+        let pipeline = shader.build(device);
 
-        Ok(Self{phan: PhantomData})
+        let bindgroup = [(0, bayered), (1, debayered)];
+
+        let pass = FullComputePass::new(device, pipeline, &bindgroup);
+
+        Ok(Self {
+            pass,
+            phan: PhantomData,
+        })
     }
 
     fn execute(
         &mut self,
-        _encoder: &mut gpwgpu::utils::Encoder,
+        encoder: &mut gpwgpu::utils::Encoder,
         _buffers: &gpwgpu::automatic_buffers::BufferSolution<Self::BufferEnum>,
         _args: &Self::Args,
     ) {
-        todo!()
+        self.pass.execute(encoder, &[]);
     }
 }

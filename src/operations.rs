@@ -9,7 +9,7 @@ use gpwgpu::{
     ExpansionError, bytemuck,
 };
 
-use crate::setup::{InputType, Params};
+use crate::setup::{InputType, Params, ISPParams};
 
 parse_shaders_dyn!(SHADERS, "src/shaders");
 
@@ -59,7 +59,7 @@ pub struct Debayer<I: InputType> {
     phan: PhantomData<I>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DebayerParams{
     pub enabled: bool,
 }
@@ -71,7 +71,7 @@ impl<I: InputType> SequentialOperation for Debayer<I> {
 
     type Error = ExpansionError;
 
-    type Args = Params<I>;
+    type Args = ISPParams;
 
     fn enabled(_params: &Self::Params) -> bool
     where
@@ -133,7 +133,7 @@ impl<I: InputType> SequentialOperation for Debayer<I> {
         _buffers: &gpwgpu::automatic_buffers::BufferSolution<Self::BufferEnum>,
         args: &Self::Args,
     ) {
-        if !args.isp.debayer.enabled{
+        if !args.debayer.enabled{
             return
         }
         self.pass.execute(encoder, &[]);
@@ -158,7 +158,7 @@ pub struct BlackLevelPush{
 	pub beta: f32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BlackLevelParams{
     pub enabled: bool,
     pub push: BlackLevelPush,
@@ -171,7 +171,7 @@ impl<I: InputType> SequentialOperation for BlackLevel<I>{
 
     type Error = ExpansionError;
 
-    type Args = Params<I>;
+    type Args = ISPParams;
 
     fn enabled(_params: &Self::Params) -> bool
     where
@@ -229,10 +229,10 @@ impl<I: InputType> SequentialOperation for BlackLevel<I>{
         _buffers: &gpwgpu::automatic_buffers::BufferSolution<Self::BufferEnum>,
         args: &Self::Args,
     ) {
-        if !args.isp.black_level.enabled{
+        if !args.black_level.enabled{
             return
         }
-        self.pass.execute(encoder, bytemuck::bytes_of(&args.isp.black_level.push))
+        self.pass.execute(encoder, bytemuck::bytes_of(&args.black_level.push))
     }
 }
 

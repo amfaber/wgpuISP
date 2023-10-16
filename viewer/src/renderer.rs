@@ -1,10 +1,7 @@
-// use std::{
-//     borrow::Cow,
-//     sync::{
-//         atomic::{AtomicBool, Ordering},
-//         Arc,
-//     },
-// };
+use std::{
+    borrow::Cow,
+    sync::{Arc, Mutex},
+};
 
 use bevy::{
     asset::load_internal_asset,
@@ -26,6 +23,7 @@ use bevy::{
         self,
         camera::ExtractedCamera,
         extract_component::{ExtractComponent, ExtractComponentPlugin},
+        extract_resource,
         mesh::MeshVertexBufferLayout,
         render_asset::{PrepareAssetError, RenderAsset, RenderAssetPlugin, RenderAssets},
         render_graph::{
@@ -39,18 +37,21 @@ use bevy::{
         render_resource::*,
         renderer::{RenderContext, RenderDevice, RenderQueue},
         texture::{
-            CachedTexture, FallbackImage, ImageSampler, TextureCache,
-            TextureFormatPixelInfo,
+            CachedTexture, FallbackImage, ImageSampler, TextureCache, TextureFormatPixelInfo,
         },
         view::{ExtractedView, ViewDepthTexture, ViewTarget, VisibleEntities},
         Extract, Render, RenderApp, RenderSet,
     },
     utils::{FloatOrd, HashMap},
 };
+use gpwgpu::{automatic_buffers::AllOperations, bytemuck, wgpu, ExpansionError, utils::DebugEncoder};
+use wgpu_isp::{
+    operations::Buffers,
+    setup::{ISPParams, InputType, Params as SetupParams, State as ISPState},
+};
 
 // pub const VOLUME_RENDER_HANDLE: HandleUntyped =
 //     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 2645551194423108407);
-
 
 pub struct ISPRenderPlugin;
 
@@ -63,40 +64,40 @@ impl Plugin for ISPRenderPlugin {
         //     Shader::from_wgsl
         // );
 
-        app.add_plugins((
-            ExtractComponentPlugin::<Handle<ISPRenderAsset>>::default(),
-            RenderAssetPlugin::<ISPRenderAsset>::default(),
-        ))
-        .insert_resource(Msaa::Off)
-        .add_asset::<ISPRenderAsset>();
+        // app.add_plugins((
+        //     ExtractComponentPlugin::<Handle<ISPRenderAsset>>::default(),
+        //     RenderAssetPlugin::<ISPRenderAsset>::default(),
+        // ))
+        // .insert_resource(Msaa::Off)
+        // .add_asset::<ISPRenderAsset>();
 
-        app.sub_app_mut(RenderApp)
-            .init_resource::<DrawFunctions<ISPPhaseItem>>()
-            .add_render_command::<ISPPhaseItem, DrawISP>()
-            .init_resource::<SpecializedMeshPipelines<ISPPipeline>>()
-            .init_resource::<RenderAssets<ISPRenderAsset>>()
-            .add_systems(ExtractSchedule, extract_camera_isp_phase)
-            .add_systems(
-                Render,
-                (
-                    queue.in_set(RenderSet::Queue),
-                    // prepare_render_textures
-                        // .in_set(RenderSet::Prepare)
-                        // .after(render::view::prepare_windows),
-                ),
-            )
-            .add_render_graph_node::<ViewNodeRunner<ISPNode>>(
-                core_3d::graph::NAME,
-                ISPNode::NAME,
-            )
-            .add_render_graph_edges(
-                core_3d::graph::NAME,
-                &[
-                    core_3d::graph::node::MAIN_TRANSPARENT_PASS,
-                    ISPNode::NAME,
-                    core_3d::graph::node::END_MAIN_PASS,
-                ],
-            );
+        // app.sub_app_mut(RenderApp)
+        //     .init_resource::<DrawFunctions<ISPPhaseItem>>()
+        //     .add_render_command::<ISPPhaseItem, DrawISP>()
+        //     .init_resource::<SpecializedMeshPipelines<ISPPipeline>>()
+        //     .init_resource::<RenderAssets<ISPRenderAsset>>()
+        //     .add_systems(ExtractSchedule, extract_camera_isp_phase)
+        //     .add_systems(
+        //         Render,
+        //         (
+        //             queue.in_set(RenderSet::Queue),
+        //             // prepare_render_textures
+        //                 // .in_set(RenderSet::Prepare)
+        //                 // .after(render::view::prepare_windows),
+        //         ),
+        //     )
+        //     .add_render_graph_node::<ViewNodeRunner<ISPNode>>(
+        //         core_3d::graph::NAME,
+        //         ISPNode::NAME,
+        //     )
+        //     .add_render_graph_edges(
+        //         core_3d::graph::NAME,
+        //         &[
+        //             core_3d::graph::node::MAIN_TRANSPARENT_PASS,
+        //             ISPNode::NAME,
+        //             core_3d::graph::node::END_MAIN_PASS,
+        //         ],
+        //     );
     }
 
     fn finish(&self, app: &mut App) {
@@ -142,37 +143,120 @@ impl Plugin for ISPRenderPlugin {
 //     }
 // }
 
-#[derive(AsBindGroup, TypePath, TypeUuid)]
+pub struct SendState(ISPState<'static, u16>);
+
+// Kinda illegal, but I believe it works in this context
+unsafe impl Send for SendState {}
+unsafe impl Sync for SendState {}
+
+#[derive(TypePath, TypeUuid, Clone)]
 #[uuid = "6ea266a6-6cf3-53a4-9986-1d7bf5c12396"]
-pub struct ISPRenderAsset {
+pub struct BevyISPState(SetupParams<u16>);
 
-}
-
-impl RenderAsset for ISPRenderAsset {
+impl RenderAsset for BevyISPState {
     type ExtractedAsset = Self;
 
-    type PreparedAsset = PreparedISP;
+    type PreparedAsset = SendState;
+
+    type Param = (SRes<RenderDevice>, SRes<RenderQueue>);
+
+    fn extract_asset(&self) -> Self::ExtractedAsset {
+        self.clone()
+    }
+
+    fn prepare_asset(
+        extracted_asset: Self::ExtractedAsset,
+        (device, queue): &mut SystemParamItem<Self::Param>,
+    ) -> Result<Self::PreparedAsset, PrepareAssetError<Self::ExtractedAsset>> {
+        unsafe {
+            let device = std::mem::transmute::<&wgpu::Device, &wgpu::Device>(device.wgpu_device());
+            let queue = std::mem::transmute::<&wgpu::Queue, &wgpu::Queue>(queue);
+            let state = ISPState::new(device, queue, extracted_asset.0).unwrap();
+            Ok(SendState(state))
+        }
+    }
+}
+
+#[derive(TypePath, TypeUuid, Clone)]
+#[uuid = "6ea266a6-6cf3-53a4-9986-1d5bf5c12396"]
+pub struct ISPImage {
+    pub data: Arc<Vec<u16>>,
+    pub states: Vec<Handle<BevyISPState>>,
+}
+
+impl RenderAsset for ISPImage {
+    type ExtractedAsset = Self;
+
+    type PreparedAsset = ();
+
+    type Param = (
+        SResMut<RenderAssets<BevyISPState>>,
+        SRes<RenderDevice>,
+        SRes<RenderQueue>,
+    );
+
+    fn extract_asset(&self) -> Self::ExtractedAsset {
+        self.clone()
+    }
+
+    fn prepare_asset(
+        mut extracted_asset: Self::ExtractedAsset,
+        (state_assets, device, queue): &mut SystemParamItem<Self::Param>,
+    ) -> Result<Self::PreparedAsset, PrepareAssetError<Self::ExtractedAsset>> {
+        let mut ready = Vec::new();
+        let mut not_ready = Vec::new();
+        for state in extracted_asset.states.into_iter() {
+            if state_assets.contains_key(&state) {
+                ready.push(state)
+            } else {
+                not_ready.push(state)
+            }
+        }
+        let mut state_iter = ready.iter();
+        if let Some(state) = state_iter.next() {
+            let asset = state_assets.get(state).unwrap();
+            let first_buf = asset.0.sequential.buffers.get_from_any(Buffers::Raw);
+
+            queue.write_buffer(first_buf, 0, bytemuck::cast_slice(&extracted_asset.data));
+
+            let mut encoder = device.create_command_encoder(&Default::default());
+            for next_state in state_iter {
+                let asset = state_assets.get(next_state).unwrap();
+                let buf = asset.0.sequential.buffers.get_from_any(Buffers::Raw);
+                encoder.copy_buffer_to_buffer(first_buf, 0, buf, 0, first_buf.size());
+            }
+            queue.submit(Some(encoder.finish()));
+        }
+        if !not_ready.is_empty() {
+            extracted_asset.states = not_ready;
+            Err(PrepareAssetError::RetryNextUpdate(extracted_asset))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[derive(TypePath, TypeUuid, Clone)]
+#[uuid = "61a266a6-6cf3-53a4-9986-1d7bf5c12396"]
+pub struct BevyISPParams(ISPParams);
+
+impl RenderAsset for BevyISPParams {
+    type ExtractedAsset = Self;
+
+    type PreparedAsset = Self;
 
     type Param = ();
 
     fn extract_asset(&self) -> Self::ExtractedAsset {
-		todo!()
+        self.clone()
     }
 
     fn prepare_asset(
         extracted_asset: Self::ExtractedAsset,
         (): &mut SystemParamItem<Self::Param>,
     ) -> Result<Self::PreparedAsset, PrepareAssetError<Self::ExtractedAsset>> {
-		todo!()
-	}
-}
-
-#[allow(unused)]
-#[derive(Component)]
-pub struct PreparedISP {
-    pub bindings: Vec<OwnedBindingResource>,
-    pub bind_group: BindGroup,
-    pub key: <ISPRenderAsset as AsBindGroup>::Data,
+        Ok(extracted_asset)
+    }
 }
 
 #[derive(Default)]
@@ -191,8 +275,8 @@ impl ViewNode for ISPNode {
         (): QueryItem<Self::ViewQuery>,
         world: &World,
     ) -> Result<(), NodeRunError> {
-		todo!()
-	}
+        todo!()
+    }
 }
 
 pub struct ISPPhaseItem {
@@ -241,56 +325,53 @@ pub fn extract_camera_isp_phase(
         if camera.is_active {
             commands
                 .get_or_spawn(entity)
-                .insert((
-                    RenderPhase::<ISPPhaseItem>::default(),
-                ));
+                .insert((RenderPhase::<ISPPhaseItem>::default(),));
         }
     }
 }
 
-fn queue(
-    isp_draw_functions: Res<DrawFunctions<ISPPhaseItem>>,
-    isp_pipeline: Res<ISPPipeline>,
-    msaa: Res<Msaa>,
-    mut pipelines: ResMut<SpecializedMeshPipelines<ISPPipeline>>,
-    pipeline_cache: Res<PipelineCache>,
-    meshes: Res<RenderAssets<Mesh>>,
-    material_meshes: Query<(Entity, &MeshUniform, &Handle<Mesh>), With<Handle<ISPRenderAsset>>>,
+fn queue(// isp_draw_functions: Res<DrawFunctions<ISPPhaseItem>>,
+    // isp_pipeline: Res<ISPPipeline>,
+    // msaa: Res<Msaa>,
+    // mut pipelines: ResMut<SpecializedMeshPipelines<ISPPipeline>>,
+    // pipeline_cache: Res<PipelineCache>,
+    // meshes: Res<RenderAssets<Mesh>>,
+    // material_meshes: Query<(Entity, &MeshUniform, &Handle<Mesh>), With<Handle<ISPRenderAsset>>>,
 
-    mut views: Query<(
-        &ExtractedView,
-        &mut RenderPhase<ISPPhaseItem>,
-        &VisibleEntities,
-    )>,
+    // mut views: Query<(
+    //     &ExtractedView,
+    //     &mut RenderPhase<ISPPhaseItem>,
+    //     &VisibleEntities,
+    // )>,
 ) {
-    let draw = isp_draw_functions.read().id::<DrawISP>();
+    // let draw = isp_draw_functions.read().id::<DrawISP>();
 
-    let msaa_key = MeshPipelineKey::from_msaa_samples(msaa.samples());
+    // let msaa_key = MeshPipelineKey::from_msaa_samples(msaa.samples());
 
-    for (view, mut isp_phase, visible_ents) in &mut views {
-        let view_key = msaa_key | MeshPipelineKey::from_hdr(view.hdr);
-        let rangefinder = view.rangefinder3d();
-        for &ent in &visible_ents.entities {
-            let Ok((
-                entity,
-                mesh_uniform,
-                mesh_handle
-            )) = material_meshes.get(ent) else {continue};
-            if let Some(mesh) = meshes.get(mesh_handle) {
-                let key =
-                    view_key | MeshPipelineKey::from_primitive_topology(mesh.primitive_topology);
-                let pipeline = pipelines
-                    .specialize(&pipeline_cache, &isp_pipeline, key, &mesh.layout)
-                    .unwrap();
-                isp_phase.add(ISPPhaseItem {
-                    entity,
-                    pipeline,
-                    draw_function: draw,
-                    distance: rangefinder.distance(&mesh_uniform.transform),
-                });
-            }
-        }
-    }
+    // for (view, mut isp_phase, visible_ents) in &mut views {
+    //     let view_key = msaa_key | MeshPipelineKey::from_hdr(view.hdr);
+    //     let rangefinder = view.rangefinder3d();
+    //     for &ent in &visible_ents.entities {
+    //         let Ok((
+    //             entity,
+    //             mesh_uniform,
+    //             mesh_handle
+    //         )) = material_meshes.get(ent) else {continue};
+    //         if let Some(mesh) = meshes.get(mesh_handle) {
+    //             let key =
+    //                 view_key | MeshPipelineKey::from_primitive_topology(mesh.primitive_topology);
+    //             let pipeline = pipelines
+    //                 .specialize(&pipeline_cache, &isp_pipeline, key, &mesh.layout)
+    //                 .unwrap();
+    //             isp_phase.add(ISPPhaseItem {
+    //                 entity,
+    //                 pipeline,
+    //                 draw_function: draw,
+    //                 distance: rangefinder.distance(&mesh_uniform.transform),
+    //             });
+    //         }
+    //     }
+    // }
 }
 
 #[derive(Resource)]
@@ -304,7 +385,7 @@ pub struct ISPPipeline {
 
 impl FromWorld for ISPPipeline {
     fn from_world(world: &mut World) -> Self {
-		todo!()
+        todo!()
         // // let shader = VOLUME_RENDER_HANDLE.typed();
 
         // let mesh_pipeline = world.resource::<MeshPipeline>();
@@ -363,7 +444,7 @@ impl SpecializedMeshPipeline for ISPPipeline {
         key: Self::Key,
         layout: &MeshVertexBufferLayout,
     ) -> Result<RenderPipelineDescriptor, SpecializedMeshPipelineError> {
-		todo!()
+        todo!()
         // let mut descriptor = self.mesh_pipeline.specialize(key, layout)?;
         // descriptor.label = Some("my pipeline".into());
 
@@ -410,7 +491,7 @@ impl SpecializedMeshPipeline for ISPPipeline {
     }
 }
 
-type DrawISP = DrawMesh;
+type DrawISP = (ExecutePipeline);
 // type DrawVolume = (
 //     SetItemPipeline,
 //     SetMeshViewBindGroup<0>,
@@ -420,154 +501,60 @@ type DrawISP = DrawMesh;
 //     DrawMesh,
 // );
 
-struct SetStaticBindGroup<const I: usize>;
-impl<const I: usize> RenderCommand<ISPPhaseItem> for SetStaticBindGroup<I> {
-    type Param = ();
+struct ExecutePipeline;
+impl RenderCommand<ISPPhaseItem> for ExecutePipeline {
+    type Param = (
+        SRes<RenderAssets<BevyISPState>>,
+        // SRes<RenderAssets<ISPImage>>,
+        SRes<RenderAssets<BevyISPParams>>,
+    );
 
-    type ViewWorldQuery = Read<DepthBindGroup>;
-
-    type ItemWorldQuery = ();
-
-    fn render<'w>(
-        _item: &ISPPhaseItem,
-        bind_group: ROQueryItem<'w, Self::ViewWorldQuery>,
-        _entity: ROQueryItem<'w, Self::ItemWorldQuery>,
-        _param: SystemParamItem<'w, '_, Self::Param>,
-        pass: &mut TrackedRenderPass<'w>,
-    ) -> RenderCommandResult {
-        pass.set_bind_group(I, &bind_group.value, &[]);
-        RenderCommandResult::Success
-    }
-}
-
-struct SetISPBindGroup<const I: usize>;
-impl<const I: usize> RenderCommand<ISPPhaseItem> for SetISPBindGroup<I> {
-    type Param = SRes<RenderAssets<ISPRenderAsset>>;
     type ViewWorldQuery = ();
-    type ItemWorldQuery = Read<Handle<ISPRenderAsset>>;
 
-    #[inline]
+    type ItemWorldQuery = (
+        Read<Handle<BevyISPState>>,
+        // Read<Handle<ISPImage>>,
+        Read<Handle<BevyISPParams>>,
+    );
+
     fn render<'w>(
         _item: &ISPPhaseItem,
-        _view: (),
-        handle: ROQueryItem<Self::ItemWorldQuery>,
-        prepared: SystemParamItem<Self::Param>,
-        pass: &mut TrackedRenderPass<'w>,
+        _view: ROQueryItem<'w, Self::ViewWorldQuery>,
+        (state, params): ROQueryItem<'w, Self::ItemWorldQuery>,
+        (states, asset_params): SystemParamItem<'w, '_, Self::Param>,
+        _pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
-        let prepared_isp = prepared.get(handle).unwrap();
-        let illegal = unsafe { std::mem::transmute(&prepared_isp.bind_group) };
-        pass.set_bind_group(I, illegal, &[]);
+        let Some(state) = states.get(state) else { return RenderCommandResult::Failure };
+        let Some(params) = asset_params.get(params) else { return RenderCommandResult::Failure };
+
+        let mut encoder = DebugEncoder::new(&state.0.device);
+        state.0.sequential.execute(&mut encoder, &params.0);
+        encoder.submit(&state.0.queue);
+        
         RenderCommandResult::Success
     }
 }
 
-#[derive(Component)]
-struct ISPRenderAssetTextures {
-    // render_target: CachedTexture,
-    depth_texture: CachedTexture,
-    debug_texture: CachedTexture,
-}
+// struct SetISPBindGroup<const I: usize>;
+// impl<const I: usize> RenderCommand<ISPPhaseItem> for SetISPBindGroup<I> {
+//     type Param = ();
+//     // type Param = SRes<RenderAssets<()>>;
+//     type ViewWorldQuery = ();
+//     type ItemWorldQuery = Read<Handle<()>>;
 
-#[derive(Component)]
-struct DepthBindGroup {
-    value: BindGroup,
-}
-
-// fn prepare_render_textures(
-//     mut commands: Commands,
-//     mut texture_cache: ResMut<TextureCache>,
-//     isp_pipeline: Res<ISPPipeline>,
-//     render_device: Res<RenderDevice>,
-//     views_3d: Query<(Entity, &ExtractedCamera), With<RenderPhase<ISPPhaseItem>>>,
-// ) {
-//     let mut textures = HashMap::default();
-
-//     for (entity, camera) in &views_3d {
-//         let Some(physical_target_size) = camera.physical_target_size else {
-//             continue;
-//         };
-//         let size = Extent3d {
-//             depth_or_array_layers: 1,
-//             width: physical_target_size.x,
-//             height: physical_target_size.y,
-//         };
-
-//         let (depth, debug) = textures
-//             .entry(camera.target.clone())
-//             .or_insert_with(|| {
-//                 let depth = {
-//                     let usage = TextureUsages::TEXTURE_BINDING
-//                         | TextureUsages::COPY_DST
-//                         | TextureUsages::COPY_SRC;
-
-//                     let descriptor = TextureDescriptor {
-//                         label: Some("volume_depth_buffer"),
-//                         size,
-//                         mip_level_count: 1,
-//                         sample_count: 1,
-//                         dimension: TextureDimension::D2,
-//                         format: TextureFormat::Depth32Float,
-//                         usage,
-//                         view_formats: &[],
-//                     };
-//                     texture_cache.get(&render_device, descriptor)
-//                 };
-
-//                 let debug = {
-//                     let size = Extent3d {
-//                         depth_or_array_layers: 8,
-//                         ..size
-//                     };
-//                     let usage = TextureUsages::STORAGE_BINDING
-//                         | TextureUsages::COPY_DST
-//                         | TextureUsages::COPY_SRC;
-
-//                     let descriptor = TextureDescriptor {
-//                         label: Some("volume_depth_buffer"),
-//                         size,
-//                         mip_level_count: 1,
-//                         sample_count: 1,
-//                         dimension: TextureDimension::D2,
-//                         format: TextureFormat::R32Float,
-//                         usage,
-//                         view_formats: &[],
-//                     };
-//                     texture_cache.get(&render_device, descriptor)
-//                 };
-//                 (depth, debug)
-//             })
-//             .clone();
-
-//         let depth_bindgroup_entries = [
-//             BindGroupEntry {
-//                 binding: 0,
-//                 resource: BindingResource::TextureView(&depth.default_view),
-//             },
-//             BindGroupEntry {
-//                 binding: 1,
-//                 resource: BindingResource::Sampler(&volume_pipeline.depth_sampler),
-//             },
-//             BindGroupEntry {
-//                 binding: 2,
-//                 resource: BindingResource::TextureView(&debug.default_view),
-//             },
-//         ];
-
-//         let depth_bind_group = render_device.create_bind_group(&BindGroupDescriptor {
-//             label: None,
-//             layout: &volume_pipeline.depth_layout,
-//             entries: &depth_bindgroup_entries,
-//         });
-
-//         commands
-//             .entity(entity)
-//             .insert(ISPRenderAssetTextures {
-//                 depth_texture: depth,
-//                 debug_texture: debug,
-//             })
-//             .insert(DepthBindGroup {
-//                 value: depth_bind_group,
-//             });
+//     #[inline]
+//     fn render<'w>(
+//         _item: &ISPPhaseItem,
+//         _view: (),
+//         handle: ROQueryItem<Self::ItemWorldQuery>,
+//         prepared: SystemParamItem<Self::Param>,
+//         pass: &mut TrackedRenderPass<'w>,
+//     ) -> RenderCommandResult {
+//         // let prepared_isp = prepared.get(handle).unwrap();
+//         // let illegal = unsafe { std::mem::transmute(&prepared_isp.bind_group) };
+//         // pass.set_bind_group(I, illegal, &[]);
+//         // RenderCommandResult::Success
+//         todo!()
 //     }
 // }
 

@@ -11,4 +11,8 @@ edition = "2021"
 
 [dependencies]
 bytemuck = { version = "1.14.0", features = ["derive"] }
+gpwgpu.workspace = true
+
+
+[workspace.dependencies]
 gpwgpu.path = "../gpwgpu"

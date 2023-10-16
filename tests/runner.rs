@@ -16,21 +16,22 @@ fn runner() {
     let params = Params {
         width: 1920,
         height: 1080,
-        isp: ISPParams {
-            debayer: DebayerParams { enabled: true },
-            black_level: BlackLevelParams {
-                enabled: true,
-                push: BlackLevelPush {
-                    r_offset: 0.0,
-                    gr_offset: 0.,
-                    gb_offset: 0.0,
-                    b_offset: 0.0,
-                    alpha: 0.0,
-                    beta: 0.0,
-                },
+        phan: PhantomData::<u16>,
+    };
+    
+    let isp_params = ISPParams {
+        debayer: DebayerParams { enabled: true },
+        black_level: BlackLevelParams {
+            enabled: true,
+            push: BlackLevelPush {
+                r_offset: 0.0,
+                gr_offset: 0.0,
+                gb_offset: 0.0,
+                b_offset: 0.0,
+                alpha: 0.0,
+                beta: 0.0,
             },
         },
-        phan: PhantomData::<u16>,
     };
 
     let state = State::new(&device, &queue, params).unwrap();
@@ -43,8 +44,6 @@ fn runner() {
         .collect::<Vec<_>>();
 
     let input_buf = state.sequential.buffers.get_from_any(Buffers::Raw);
-
-    let output_buf = state.sequential.buffers.get_from_any(Buffers::RGB);
 
     let now = Instant::now();
     for _ in 0..1000 {
@@ -61,12 +60,16 @@ fn runner() {
                     None,
                     "black_level",
                 ),
-                InspectBuffer::new(output_buf, None, "output"),
+                InspectBuffer::new(
+                    state.sequential.buffers.get_from_any(Buffers::RGB),
+                    None,
+                    "output",
+                ),
             ],
             save_path: "tests/dumps".into(),
             create_py: true,
         });
-        state.sequential.execute(&mut encoder, &state.params);
+        state.sequential.execute(&mut encoder, &isp_params);
 
         // encoder.activate();
         // encoder.inspect_buffers().unwrap();

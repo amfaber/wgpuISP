@@ -3283,6 +3283,7 @@ name = "viewer"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "gpwgpu",
  "wgpu_isp",
 ]
 

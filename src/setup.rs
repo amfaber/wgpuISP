@@ -15,18 +15,16 @@ pub trait InputType: Sized + std::fmt::Debug + 'static{
 impl InputType for u16{
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ISPParams{
     pub debayer: DebayerParams,
     pub black_level: BlackLevelParams,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Params<I: InputType>{
     pub width: i32,
     pub height: i32,
-
-    pub isp: ISPParams,
 
     pub phan: PhantomData<I>
 }
@@ -45,7 +43,7 @@ pub struct State<'a, I: InputType>{
     pub device: &'a Device,
     pub queue: &'a Queue,
     pub params: Params<I>,
-    pub sequential: AllOperations<Params<I>, Buffers, StateError, Params<I>>,
+    pub sequential: AllOperations<Params<I>, Buffers, StateError, ISPParams>,
 }
 
 impl<'a, I: InputType> State<'a, I>{

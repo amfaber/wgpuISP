@@ -1,10 +1,10 @@
-use std::{
-    borrow::Cow,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-};
+// use std::{
+//     borrow::Cow,
+//     sync::{
+//         atomic::{AtomicBool, Ordering},
+//         Arc,
+//     },
+// };
 
 use bevy::{
     asset::load_internal_asset,
@@ -104,47 +104,48 @@ impl Plugin for ISPRenderPlugin {
     }
 }
 
-#[derive(Debug, Clone, ShaderType, Default, TypePath, TypeUuid)]
-#[uuid = "6ea266a6-6cf3-53a4-9287-1dabf5c17d6f"]
-pub struct RaycastInput {
-    pub bounding_box: [Vec3; 2],
-    pub cmap_bounds: Vec2,
-}
+// #[derive(Debug, Clone, ShaderType, Default, TypePath, TypeUuid)]
+// #[uuid = "6ea266a6-6cf3-53a4-9287-1dabf5c17d6f"]
+// pub struct RaycastInput {
+//     pub bounding_box: [Vec3; 2],
+//     pub cmap_bounds: Vec2,
+// }
 
-enum UpdatedSignal {
-    MainWorld(AtomicBool),
-    RenderWorld(bool),
-}
+// enum UpdatedSignal {
+//     MainWorld(AtomicBool),
+//     RenderWorld(bool),
+// }
 
-pub struct Updated<T: Clone> {
-    pub data: T,
-    updated: UpdatedSignal,
-}
+// pub struct Updated<T: Clone> {
+//     pub data: T,
+//     updated: UpdatedSignal,
+// }
 
-impl<T: Clone> Updated<T> {
-    fn new(data: T, updated: bool) -> Self {
-        Self {
-            data,
-            updated: UpdatedSignal::MainWorld(AtomicBool::new(updated)),
-        }
-    }
+// impl<T: Clone> Updated<T> {
+//     fn new(data: T, updated: bool) -> Self {
+//         Self {
+//             data,
+//             updated: UpdatedSignal::MainWorld(AtomicBool::new(updated)),
+//         }
+//     }
 
-    fn take_clone(&self) -> Self {
-        let UpdatedSignal::MainWorld(atomic) = &self.updated else {
-            unreachable!("take_clone should only be called on updates from the
-                main world");
-        };
-        let updated = atomic.swap(false, Ordering::SeqCst);
-        Self {
-            data: self.data.clone(),
-            updated: UpdatedSignal::RenderWorld(updated),
-        }
-    }
-}
+//     fn take_clone(&self) -> Self {
+//         let UpdatedSignal::MainWorld(atomic) = &self.updated else {
+//             unreachable!("take_clone should only be called on updates from the
+//                 main world");
+//         };
+//         let updated = atomic.swap(false, Ordering::SeqCst);
+//         Self {
+//             data: self.data.clone(),
+//             updated: UpdatedSignal::RenderWorld(updated),
+//         }
+//     }
+// }
 
 #[derive(AsBindGroup, TypePath, TypeUuid)]
 #[uuid = "6ea266a6-6cf3-53a4-9986-1d7bf5c12396"]
 pub struct ISPRenderAsset {
+
 }
 
 impl RenderAsset for ISPRenderAsset {
@@ -234,23 +235,22 @@ impl CachedRenderPipelinePhaseItem for ISPPhaseItem {
 
 pub fn extract_camera_isp_phase(
     mut commands: Commands,
-    cameras_3d: Extract<Query<(Entity, &Camera), With<Camera3d>>>,
+    cameras_2d: Extract<Query<(Entity, &Camera), With<Camera2d>>>,
 ) {
-    for (entity, camera) in &cameras_3d {
+    for (entity, camera) in &cameras_2d {
         if camera.is_active {
             commands
                 .get_or_spawn(entity)
                 .insert((
                     RenderPhase::<ISPPhaseItem>::default(),
-                    // NeedsCompositeBindGroup,
                 ));
         }
     }
 }
 
 fn queue(
-    volume_3d_draw_functions: Res<DrawFunctions<ISPPhaseItem>>,
-    volume_pipeline: Res<ISPPipeline>,
+    isp_draw_functions: Res<DrawFunctions<ISPPhaseItem>>,
+    isp_pipeline: Res<ISPPipeline>,
     msaa: Res<Msaa>,
     mut pipelines: ResMut<SpecializedMeshPipelines<ISPPipeline>>,
     pipeline_cache: Res<PipelineCache>,
@@ -263,11 +263,11 @@ fn queue(
         &VisibleEntities,
     )>,
 ) {
-    let draw = volume_3d_draw_functions.read().id::<DrawISP>();
+    let draw = isp_draw_functions.read().id::<DrawISP>();
 
     let msaa_key = MeshPipelineKey::from_msaa_samples(msaa.samples());
 
-    for (view, mut volume_phase, visible_ents) in &mut views {
+    for (view, mut isp_phase, visible_ents) in &mut views {
         let view_key = msaa_key | MeshPipelineKey::from_hdr(view.hdr);
         let rangefinder = view.rangefinder3d();
         for &ent in &visible_ents.entities {
@@ -280,9 +280,9 @@ fn queue(
                 let key =
                     view_key | MeshPipelineKey::from_primitive_topology(mesh.primitive_topology);
                 let pipeline = pipelines
-                    .specialize(&pipeline_cache, &volume_pipeline, key, &mesh.layout)
+                    .specialize(&pipeline_cache, &isp_pipeline, key, &mesh.layout)
                     .unwrap();
-                volume_phase.add(ISPPhaseItem {
+                isp_phase.add(ISPPhaseItem {
                     entity,
                     pipeline,
                     draw_function: draw,

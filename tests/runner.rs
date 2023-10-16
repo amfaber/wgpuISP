@@ -21,7 +21,7 @@ fn runner() {
             black_level: BlackLevelParams {
                 enabled: true,
                 push: BlackLevelPush {
-                    r_offset: 1000.,
+                    r_offset: 0.0,
                     gr_offset: 0.,
                     gb_offset: 0.0,
                     b_offset: 0.0,
@@ -47,7 +47,7 @@ fn runner() {
     let output_buf = state.sequential.buffers.get_from_any(Buffers::RGB);
 
     let now = Instant::now();
-    for _ in 0..100 {
+    for _ in 0..1000 {
         queue.write_buffer(input_buf, 0, bytemuck::cast_slice(&data));
 
         let mut encoder = DebugEncoder::new(&device);
@@ -68,8 +68,8 @@ fn runner() {
         });
         state.sequential.execute(&mut encoder, &state.params);
 
-        encoder.activate();
-        encoder.inspect_buffers().unwrap();
+        // encoder.activate();
+        // encoder.inspect_buffers().unwrap();
 
         device.poll(gpwgpu::wgpu::MaintainBase::Wait);
         encoder.submit(&queue);

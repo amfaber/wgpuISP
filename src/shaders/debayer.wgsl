@@ -187,17 +187,17 @@ fn main(
 	let mod_col = global_id.y % 2u;
 
 	if mod_row == 0u && mod_col == 0u{
-		// color = malvar_r(local_center);
-		color = vec3(access_local(local_center.x, local_center.y), 0., 0.);
+		color = malvar_r(local_center);
+		// color = vec3(access_local(local_center.x, local_center.y), 0., 0.);
 	} else if mod_row == 0u && mod_col == 1u {
-		// color = malvar_gr(local_center);
-		color = vec3(0., access_local(local_center.x, local_center.y), 0.);
+		color = malvar_gr(local_center);
+		// color = vec3(0., access_local(local_center.x, local_center.y), 0.);
 	} else if mod_row == 1u && mod_col == 0u {
-		// color = malvar_gb(local_center);
-		color = vec3(0., access_local(local_center.x, local_center.y), 0.);
+		color = malvar_gb(local_center);
+		// color = vec3(0., access_local(local_center.x, local_center.y), 0.);
 	} else {
-		// color = malvar_b(local_center);
-		color = vec3(0., 0., access_local(local_center.x, local_center.y));
+		color = malvar_b(local_center);
+		// color = vec3(0., 0., access_local(local_center.x, local_center.y));
 	}
 
 	let global_flat = (i32(global_id.x) * #WIDTH + i32(global_id.y));

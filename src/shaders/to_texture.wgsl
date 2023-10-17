@@ -20,5 +20,5 @@ fn main(
 
 	let load = buffer[global_flat];
 	
-	textureStore(texture, global_id.xy, vec4(load.xyz / 1200., load.w));
+	textureStore(texture, global_id.yx, vec4(load.xyz / 1200., load.w));
 }

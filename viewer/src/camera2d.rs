@@ -126,7 +126,7 @@ fn camera_control_2d(
     let shift_pressed =
         keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
 
-	let window = window.single();
+	let Ok(window) = window.get_single() else { return };
 	
 
     for (camera, global, mut controller, mut transform, mut projection) in

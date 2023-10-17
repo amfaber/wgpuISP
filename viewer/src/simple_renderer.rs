@@ -1,15 +1,12 @@
 use gpwgpu::wgpu::{
-    util::DeviceExt, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutEntry, BufferDescriptor,
-    BufferUsages, Extent3d, ShaderStages, Texture, TextureDescriptor, TextureUsages,
-    TextureViewDescriptor, SamplerDescriptor, FilterMode,
+    BindGroupDescriptor, BindGroupEntry, BindGroupLayoutEntry,
+    BufferUsages, ShaderStages,
+    TextureViewDescriptor, SamplerDescriptor, FilterMode, BufferDescriptor,
 };
 use wgpu_isp::setup::State as ISPState;
 
 use bevy::{
-    core_pipeline::{
-        core_2d::Transparent2d,
-        tonemapping::{DebandDither, Tonemapping},
-    },
+    core_pipeline::core_2d::Transparent2d,
     ecs::system::{
         lifetimeless::{Read, SRes},
         SystemParamItem,
@@ -21,15 +18,13 @@ use bevy::{
             RenderPhase, SetItemPipeline, TrackedRenderPass,
         },
         render_resource::{
-            BindGroup, Buffer, BufferInitDescriptor, PipelineCache, SpecializedRenderPipelines,
+            BindGroup, Buffer, PipelineCache, SpecializedRenderPipelines,
         },
         renderer::{RenderDevice, RenderQueue},
-        view::{ExtractedView, ViewUniformOffset, ViewUniforms, VisibleEntities},
+        view::{ViewUniformOffset, ViewUniforms, VisibleEntities},
         Extract, Render, RenderApp, RenderSet,
     },
-    sprite::{SetSpriteTextureBindGroup, SetSpriteViewBindGroup, SpriteMeta},
-    // sprite::SpritePipelineKey,
-    utils::{FloatOrd, HashMap},
+    utils::FloatOrd,
 };
 
 use crate::my_sprite_pipeline::{SpritePipeline, SpritePipelineKey, SpriteVertex, QUAD_VERTEX_POSITIONS, QUAD_UVS, QUAD_INDICES};
@@ -111,7 +106,6 @@ impl StateImage {
 
         let view = state.texture.create_view(&TextureViewDescriptor::default());
 
-        dbg!("Hi");
         let bind_group = state.device.create_bind_group(&BindGroupDescriptor {
             label: None,
             layout: &layout,
@@ -126,38 +120,42 @@ impl StateImage {
                 },
             ],
         });
-        dbg!("after");
-
-        let vertex_buffer = state.device.create_buffer_init(&BufferInitDescriptor {
+        let vertex_buffer = state.device.create_buffer(&BufferDescriptor {
             label: None,
+            size: 5 * 4 * 6,
             usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-            contents: bytemuck::cast_slice(&[
-                SpriteVertex {
-                    position: [0., 0., 0.],
-                    uv: [0., 0.],
-                },
-                SpriteVertex {
-                    position: [500., 0., 0.],
-                    uv: [1., 0.],
-                },
-                SpriteVertex {
-                    position: [500., 500., 0.],
-                    uv: [1., 1.],
-                },
-                SpriteVertex {
-                    position: [0., 0., 0.],
-                    uv: [0., 0.],
-                },
-                SpriteVertex {
-                    position: [500., 500., 0.],
-                    uv: [1., 1.],
-                },
-                SpriteVertex {
-                    position: [0., 500., 0.],
-                    uv: [0., 1.],
-                },
-            ]),
+            mapped_at_creation: false,
         });
+        // let vertex_buffer = state.device.create_buffer_init(&BufferInitDescriptor {
+        //     label: None,
+        //     usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+        //     contents: bytemuck::cast_slice(&[
+        //         SpriteVertex {
+        //             position: [0., 0., 0.],
+        //             uv: [0., 0.],
+        //         },
+        //         SpriteVertex {
+        //             position: [500., 0., 0.],
+        //             uv: [1., 0.],
+        //         },
+        //         SpriteVertex {
+        //             position: [500., 500., 0.],
+        //             uv: [1., 1.],
+        //         },
+        //         SpriteVertex {
+        //             position: [0., 0., 0.],
+        //             uv: [0., 0.],
+        //         },
+        //         SpriteVertex {
+        //             position: [500., 500., 0.],
+        //             uv: [1., 1.],
+        //         },
+        //         SpriteVertex {
+        //             position: [0., 500., 0.],
+        //             uv: [0., 1.],
+        //         },
+        //     ]),
+        // });
 
         Self {
             state: SendState(state),
@@ -268,6 +266,7 @@ fn queue(
                         uv: uvs[i].into(),
                     }
                 });
+                
 
                 render_queue.write_buffer(&isp_image.vertex_buffer, 0, bytemuck::cast_slice(&verts));
                 

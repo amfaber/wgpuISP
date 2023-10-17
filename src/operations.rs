@@ -1,3 +1,4 @@
+use bytemuck::bytes_of;
 use gpwgpu::{
     automatic_buffers::{AbstractBuffer, MemoryReq, SequentialOperation},
     bytemuck, parse_shaders,
@@ -120,10 +121,15 @@ impl SequentialOperation for Debayer {
         _buffers: &gpwgpu::automatic_buffers::BufferSolution<Self::BufferEnum>,
         args: &Self::Args,
     ) {
-        if !args.debayer.enabled {
-            return;
-        }
-        self.pass.execute(encoder, &[]);
+        // if !args.debayer.enabled {
+        //     return;
+        // }
+        let push = if args.debayer.enabled{
+            1i32
+        } else {
+            0
+        };
+        self.pass.execute(encoder, bytes_of(&push));
     }
 }
 

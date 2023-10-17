@@ -126,36 +126,6 @@ impl StateImage {
             usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        // let vertex_buffer = state.device.create_buffer_init(&BufferInitDescriptor {
-        //     label: None,
-        //     usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-        //     contents: bytemuck::cast_slice(&[
-        //         SpriteVertex {
-        //             position: [0., 0., 0.],
-        //             uv: [0., 0.],
-        //         },
-        //         SpriteVertex {
-        //             position: [500., 0., 0.],
-        //             uv: [1., 0.],
-        //         },
-        //         SpriteVertex {
-        //             position: [500., 500., 0.],
-        //             uv: [1., 1.],
-        //         },
-        //         SpriteVertex {
-        //             position: [0., 0., 0.],
-        //             uv: [0., 0.],
-        //         },
-        //         SpriteVertex {
-        //             position: [500., 500., 0.],
-        //             uv: [1., 1.],
-        //         },
-        //         SpriteVertex {
-        //             position: [0., 500., 0.],
-        //             uv: [0., 1.],
-        //         },
-        //     ]),
-        // });
 
         Self {
             state: SendState(state),
@@ -164,9 +134,6 @@ impl StateImage {
         }
     }
 }
-
-// #[derive(Component)]
-// struct BindGroupComponent(pub BindGroup);
 
 fn extract_isp_image(
     mut commands: Commands,

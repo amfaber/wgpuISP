@@ -18,7 +18,10 @@ fn main(
 	}
 	let global_flat = global_id.x * u32(#WIDTH) + global_id.y;
 
+
 	let load = buffer[global_flat];
+	// let rgb = pow(load.xyz / 1200., vec3(1.2));
+	let rgb = load.xyz / 1200.;
 	
-	textureStore(texture, global_id.yx, vec4(load.xyz / 1200., load.w));
+	textureStore(texture, global_id.yx, vec4(rgb, load.w));
 }

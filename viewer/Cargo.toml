@@ -7,9 +7,11 @@ edition = "2021"
 
 [dependencies]
 wgpu_isp.path = ".."
-bevy = "0.11"
+bevy = {version = "0.11"}
 # bevy.path = "../../bevy"
 gpwgpu.workspace = true
 bitflags = "2.4.1"
 bytemuck = { version = "1.14.0", features = ["derive"] }
 bevy_egui = "0.22.0"
+notify = "6.1.1"
+crossbeam-channel = "0.5.8"

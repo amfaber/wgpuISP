@@ -3523,7 +3523,9 @@ dependencies = [
  "bevy_egui",
  "bitflags 2.4.1",
  "bytemuck",
+ "crossbeam-channel",
  "gpwgpu",
+ "notify",
  "wgpu_isp",
 ]
 

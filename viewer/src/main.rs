@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::{ops::Deref, time::Duration};
 
 use bevy::{
     prelude::*,
@@ -8,22 +8,21 @@ use bevy::{
         RenderPlugin,
     },
 };
-use gpwgpu::{shaderpreprocessor::ShaderProcessor, utils::DebugEncoder, wgpu};
-// use gpwgpu::{wgpu::{self, TextureDescriptor, TextureUsages}, shaderpreprocessor::ShaderProcessor};
 use bevy_egui::{
     egui::{self, Slider},
-    EguiPlugin,
-    EguiContexts,
+    EguiContexts, EguiPlugin,
 };
+use gpwgpu::{shaderpreprocessor::ShaderProcessor, utils::DebugEncoder, wgpu, FutureExt};
+use notify::{RecursiveMode, Watcher};
 use viewer::{
     camera2d::{My2dCameraPlugin, My2dController},
+    file_watcher::FilesystemWatcher,
     simple_renderer::{ImageSettings, SimpleRendererPlugin, StateImage},
 };
 use wgpu_isp::{
     operations::{BlackLevelParams, BlackLevelPush, DebayerParams},
     setup::{ISPParams, Params},
 };
-// use wgpu_isp::operations::{BlackLevelParams, BlackLevelPush};
 
 pub fn device_descriptor() -> wgpu::DeviceDescriptor<'static> {
     let mut desc = wgpu::DeviceDescriptor::default();
@@ -45,10 +44,90 @@ fn main() {
         }
     });
     App::new()
-        .add_plugins((default_plugins, SimpleRendererPlugin, My2dCameraPlugin, EguiPlugin))
+        .add_plugins((
+            default_plugins,
+            SimpleRendererPlugin,
+            My2dCameraPlugin,
+            EguiPlugin,
+        ))
         .add_systems(Startup, setup_scene)
-        .add_systems(Update, (re_execute, ui))
+        .init_resource::<ThisFileWatcher>()
+        .add_systems(Update, (re_execute, ui, watch_for_shader_changes))
         .run();
+}
+
+#[derive(Resource)]
+struct ThisFileWatcher(FilesystemWatcher);
+
+impl Default for ThisFileWatcher {
+    fn default() -> Self {
+        let mut watcher = FilesystemWatcher::new(Duration::from_millis(50));
+
+        watcher
+            .watcher
+            .watch("../src/shaders".as_ref(), RecursiveMode::Recursive)
+            .unwrap();
+
+        Self(watcher)
+    }
+}
+
+fn watch_for_shader_changes(
+    watcher: Res<ThisFileWatcher>,
+    mut query: Query<(&mut ShouldExecute, &mut StateImage)>,
+) {
+    if let Ok(_event) = watcher.0.receiver.try_recv() {
+        for (mut should_execute, mut state) in &mut query {
+            let shader_processor = match ShaderProcessor::load_dir_dyn("../src/shaders") {
+                Ok(processor) => processor,
+                Err(e) => {
+                    dbg!(e);
+                    continue;
+                }
+            };
+            let params = Params {
+                shader_processor,
+                ..state.state.0.params
+            };
+
+            state.state.0.device.push_error_scope(wgpu::ErrorFilter::Validation);
+            let new_state = match state.state.0.reload(params) {
+                Ok(state) => state,
+                Err(e) => {
+                    dbg!(e);
+                    continue;
+                }
+            };
+            if let Some(err) = state.state.0.device.pop_error_scope().block_on(){
+                println!("[{}:{}]\n{}", file!(), line!(), err);
+                continue
+            }
+            let mut encoder = new_state.device.create_command_encoder(&default());
+
+            let old_input = state
+                    .state
+                    .0
+                    .sequential
+                    .buffers
+                    .get_from_any(wgpu_isp::operations::Buffers::Raw);
+
+            encoder.copy_buffer_to_buffer(
+                old_input,
+                0,
+                new_state
+                    .sequential
+                    .buffers
+                    .get_from_any(wgpu_isp::operations::Buffers::Raw),
+                0,
+                old_input.size(),
+            );
+
+            new_state.queue.submit(Some(encoder.finish()));
+
+            *state = StateImage::new(new_state);
+            should_execute.0 = true;
+        }
+    }
 }
 
 #[derive(Component)]
@@ -73,6 +152,13 @@ fn setup_scene(mut commands: Commands, device: Res<RenderDevice>, queue: Res<Ren
         shader_processor: ShaderProcessor::load_dir_dyn("../src/shaders").unwrap(),
     };
 
+    let image_settings = ImageSettings {
+        size: Vec2::new(params.width as f32, params.height as f32),
+        anchor: Vec2::splat(0.0),
+        flip_x: true,
+        flip_y: true,
+    };
+
     let state = wgpu_isp::setup::State::new(device, queue, params).unwrap();
 
     let isp_params = ISPParams {
@@ -92,22 +178,7 @@ fn setup_scene(mut commands: Commands, device: Res<RenderDevice>, queue: Res<Ren
 
     state.write_to_input(&data);
 
-    // let mut encoder = DebugEncoder::new(&state.device);
-
-    // state.sequential.execute(&mut encoder, &isp_params);
-
-    // state.to_texture.execute(&mut encoder, &[]);
-
-    // encoder.submit(state.queue);
-
     let state_image = StateImage::new(state);
-
-    let image_settings = ImageSettings {
-        size: Vec2::new(1920., 1080.),
-        anchor: Vec2::splat(0.0),
-        flip_x: true,
-        flip_y: true,
-    };
 
     commands
         .spawn(Camera2dBundle::default())
@@ -157,6 +228,10 @@ fn ui(
 
     egui::SidePanel::left("primary_panel").show(ctx, |ui| {
         for (mut params, mut should_execute) in &mut query {
+            should_execute.0 |= ui
+                .checkbox(&mut params.0.debayer.enabled, "Debayer")
+                .changed();
+
             let slider = Slider::new(&mut params.0.black_level.push.r_offset, -100f32..=100f32);
             should_execute.0 |= ui.add(slider).changed();
             let slider = Slider::new(&mut params.0.black_level.push.gr_offset, -100f32..=100f32);

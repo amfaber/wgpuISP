@@ -84,6 +84,10 @@ impl<'a> State<'a> {
         let buf = self.sequential.buffers.get_from_any(Buffers::Raw);
         self.queue.write_buffer(buf, 0, bytemuck::cast_slice(data));
     }
+
+    pub fn reload(&self, params: Params) -> Result<Self, StateError>{
+        Self::new(&self.device, &self.queue, params)
+    }
 }
 
 

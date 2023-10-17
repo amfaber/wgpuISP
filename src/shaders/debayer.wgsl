@@ -6,6 +6,9 @@ var<storage, read_write> output: array<vec4<f32>>;
 
 var<workgroup> local: array<f32, #expr{(WG_X + 2 * PADDING) * (WG_Y + 2 * PADDING)}>;
 
+// Whether to do debayering if to just bring the image into RGA space without any interpolation
+var<push_constant> pc: i32;
+
 #import all_utils
 
 const local_height = #expr{WG_X + 2 * PADDING};
@@ -187,17 +190,29 @@ fn main(
 	let mod_col = global_id.y % 2u;
 
 	if mod_row == 0u && mod_col == 0u{
-		color = malvar_r(local_center);
-		// color = vec3(access_local(local_center.x, local_center.y), 0., 0.);
+		if pc == 0{
+			color = vec3(access_local(local_center.x, local_center.y), 0., 0.);
+		} else {
+			color = malvar_r(local_center);
+		}
 	} else if mod_row == 0u && mod_col == 1u {
-		color = malvar_gr(local_center);
-		// color = vec3(0., access_local(local_center.x, local_center.y), 0.);
+		if pc == 0{
+			color = vec3(0., access_local(local_center.x, local_center.y), 0.);
+		} else {
+			color = malvar_gr(local_center);
+		}
 	} else if mod_row == 1u && mod_col == 0u {
-		color = malvar_gb(local_center);
-		// color = vec3(0., access_local(local_center.x, local_center.y), 0.);
+		if pc == 0{
+			color = vec3(0., access_local(local_center.x, local_center.y), 0.);
+		} else {
+			color = malvar_gb(local_center);
+		}
 	} else {
-		color = malvar_b(local_center);
-		// color = vec3(0., 0., access_local(local_center.x, local_center.y));
+		if pc == 0{
+			color = vec3(0., 0., access_local(local_center.x, local_center.y));
+		} else {
+			color = malvar_b(local_center);
+		}
 	}
 
 	let global_flat = (i32(global_id.x) * #WIDTH + i32(global_id.y));

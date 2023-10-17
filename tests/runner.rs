@@ -1,13 +1,17 @@
 use gpwgpu::{
     bytemuck,
-    utils::{default_device, DebugBundle, DebugEncoder, InspectBuffer},
+    utils::{default_device, DebugEncoder},
     FutureExt,
 };
-use std::{marker::PhantomData, time::Instant};
+use std::time::Instant;
 use wgpu_isp::{
-    operations::{BlackLevelParams, BlackLevelPush, Buffers, DebayerParams},
+    operations::{BlackLevelParams, BlackLevelPush, Buffers, DebayerParams, SHADERS},
     setup::{ISPParams, Params, State},
 };
+
+#[allow(unused)]
+use wgpu_isp::setup::make_debug_bundle;
+
 
 #[test]
 fn runner() {
@@ -16,9 +20,9 @@ fn runner() {
     let params = Params {
         width: 1920,
         height: 1080,
-        phan: PhantomData::<u16>,
+        shader_processor: SHADERS.clone(),
     };
-    
+
     let isp_params = ISPParams {
         debayer: DebayerParams { enabled: true },
         black_level: BlackLevelParams {
@@ -50,25 +54,7 @@ fn runner() {
         queue.write_buffer(input_buf, 0, bytemuck::cast_slice(&data));
 
         let mut encoder = DebugEncoder::new(&device);
-        encoder.set_debug_bundle(DebugBundle {
-            device: &device,
-            queue: &queue,
-            inspects: vec![
-                InspectBuffer::new(input_buf, None, "input"),
-                InspectBuffer::new(
-                    state.sequential.buffers.get_from_any(Buffers::BlackLevel),
-                    None,
-                    "black_level",
-                ),
-                InspectBuffer::new(
-                    state.sequential.buffers.get_from_any(Buffers::RGB),
-                    None,
-                    "output",
-                ),
-            ],
-            save_path: "tests/dumps".into(),
-            create_py: true,
-        });
+        // encoder.set_debug_bundle(make_debug_bundle(&state));
         state.sequential.execute(&mut encoder, &isp_params);
 
         // encoder.activate();
@@ -78,6 +64,11 @@ fn runner() {
         encoder.submit(&queue);
     }
     dbg!(now.elapsed());
+
+    let mut encoder = DebugEncoder::new(&device);
+    state.to_texture.execute(&mut encoder, &[]);
+    encoder.submit(&state.queue);
+    
 
     // let retrieved = read_buffer::<f32>(&device, output_buf, 0, None);
 }

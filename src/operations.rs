@@ -1,28 +1,25 @@
-use std::marker::PhantomData;
-
 use gpwgpu::{
     automatic_buffers::{AbstractBuffer, MemoryReq, SequentialOperation},
-    parse_shaders_dyn,
+    bytemuck, parse_shaders,
     shaderpreprocessor::ShaderSpecs,
     utils::FullComputePass,
-    wgpu::BufferUsages,
-    ExpansionError, bytemuck,
+    wgpu::{BindGroupEntry, BufferUsages, Device, Texture, Buffer},
+    ExpansionError,
 };
 
-use crate::setup::{InputType, Params, ISPParams};
+use crate::setup::{ISPParams, Params};
 
-parse_shaders_dyn!(SHADERS, "src/shaders");
+parse_shaders!(pub SHADERS, "src/shaders");
 
 #[derive(Hash, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Buffers {
     Raw,
     BlackLevel,
     RGB,
-
 }
 
 impl Buffers {
-    fn init<I: InputType>(self, params: &Params<I>) -> AbstractBuffer<Self> {
+    fn init(self, params: &Params) -> AbstractBuffer<Self> {
         let name = self;
         match self {
             Buffers::Raw => AbstractBuffer {
@@ -37,9 +34,7 @@ impl Buffers {
             Buffers::BlackLevel => AbstractBuffer {
                 name,
                 memory_req: MemoryReq::Strict,
-                usage: BufferUsages::STORAGE
-                    | BufferUsages::COPY_DST
-                    | BufferUsages::COPY_SRC,
+                usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
                 size: params.byte_size() as u64,
             },
             Buffers::RGB => AbstractBuffer {
@@ -52,20 +47,18 @@ impl Buffers {
     }
 }
 
-
 #[derive(Debug)]
-pub struct Debayer<I: InputType> {
+pub struct Debayer {
     pass: FullComputePass,
-    phan: PhantomData<I>,
 }
 
 #[derive(Debug, Clone)]
-pub struct DebayerParams{
+pub struct DebayerParams {
     pub enabled: bool,
 }
 
-impl<I: InputType> SequentialOperation for Debayer<I> {
-    type Params = Params<I>;
+impl SequentialOperation for Debayer {
+    type Params = Params;
 
     type BufferEnum = Buffers;
 
@@ -86,10 +79,7 @@ impl<I: InputType> SequentialOperation for Debayer<I> {
     where
         Self: Sized,
     {
-        vec![
-            Buffers::BlackLevel.init(params),
-            Buffers::RGB.init(params),
-        ]
+        vec![Buffers::BlackLevel.init(params), Buffers::RGB.init(params)]
     }
 
     fn create(
@@ -113,7 +103,7 @@ impl<I: InputType> SequentialOperation for Debayer<I> {
                 ("PADDING", 2.into()),
             ]);
 
-        let shader = SHADERS.process_by_name("debayer", specs)?;
+        let shader = params.shader_processor.process_by_name("debayer", specs)?;
 
         let pipeline = shader.build(device);
 
@@ -121,10 +111,7 @@ impl<I: InputType> SequentialOperation for Debayer<I> {
 
         let pass = FullComputePass::new(device, pipeline, &bindgroup);
 
-        Ok(Self {
-            pass,
-            phan: PhantomData,
-        })
+        Ok(Self { pass })
     }
 
     fn execute(
@@ -133,39 +120,37 @@ impl<I: InputType> SequentialOperation for Debayer<I> {
         _buffers: &gpwgpu::automatic_buffers::BufferSolution<Self::BufferEnum>,
         args: &Self::Args,
     ) {
-        if !args.debayer.enabled{
-            return
+        if !args.debayer.enabled {
+            return;
         }
         self.pass.execute(encoder, &[]);
     }
 }
 
-
 #[derive(Debug)]
-pub struct BlackLevel<I: InputType>{
+pub struct BlackLevel {
     pass: FullComputePass,
-    phan: PhantomData<I>,
 }
 
-#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable, Default)]
 #[repr(C)]
-pub struct BlackLevelPush{
-	pub r_offset: f32,
-	pub gr_offset: f32,
-	pub gb_offset: f32,
-	pub b_offset: f32,
-	pub alpha: f32,
-	pub beta: f32,
+pub struct BlackLevelPush {
+    pub r_offset: f32,
+    pub gr_offset: f32,
+    pub gb_offset: f32,
+    pub b_offset: f32,
+    pub alpha: f32,
+    pub beta: f32,
 }
 
 #[derive(Debug, Clone)]
-pub struct BlackLevelParams{
+pub struct BlackLevelParams {
     pub enabled: bool,
     pub push: BlackLevelPush,
 }
 
-impl<I: InputType> SequentialOperation for BlackLevel<I>{
-    type Params = Params<I>;
+impl SequentialOperation for BlackLevel {
+    type Params = Params;
 
     type BufferEnum = Buffers;
 
@@ -175,17 +160,16 @@ impl<I: InputType> SequentialOperation for BlackLevel<I>{
 
     fn enabled(_params: &Self::Params) -> bool
     where
-        Self: Sized {
+        Self: Sized,
+    {
         true
     }
 
     fn buffers(params: &Self::Params) -> Vec<AbstractBuffer<Self::BufferEnum>>
     where
-        Self: Sized {
-        vec![
-            Buffers::Raw.init(params),
-            Buffers::BlackLevel.init(params),
-        ]
+        Self: Sized,
+    {
+        vec![Buffers::Raw.init(params), Buffers::BlackLevel.init(params)]
     }
 
     fn create(
@@ -194,7 +178,8 @@ impl<I: InputType> SequentialOperation for BlackLevel<I>{
         buffers: &gpwgpu::automatic_buffers::BufferSolution<Self::BufferEnum>,
     ) -> Result<Self, Self::Error>
     where
-        Self: Sized {
+        Self: Sized,
+    {
         let raw = buffers.get::<Self>(Buffers::Raw);
         let black_level = buffers.get::<Self>(Buffers::BlackLevel);
 
@@ -208,7 +193,7 @@ impl<I: InputType> SequentialOperation for BlackLevel<I>{
                 ("PADDING", 1.into()),
             ]);
 
-        let shader = SHADERS.process_by_name("black_level", specs)?;
+        let shader = params.shader_processor.process_by_name("black_level", specs)?;
 
         let pipeline = shader.build(device);
 
@@ -216,11 +201,7 @@ impl<I: InputType> SequentialOperation for BlackLevel<I>{
 
         let pass = FullComputePass::new(device, pipeline, &bindgroup);
 
-        Ok(Self {
-            pass,
-            phan: PhantomData,
-        })
-        
+        Ok(Self { pass })
     }
 
     fn execute(
@@ -229,10 +210,53 @@ impl<I: InputType> SequentialOperation for BlackLevel<I>{
         _buffers: &gpwgpu::automatic_buffers::BufferSolution<Self::BufferEnum>,
         args: &Self::Args,
     ) {
-        if !args.black_level.enabled{
-            return
+        if !args.black_level.enabled {
+            return;
         }
-        self.pass.execute(encoder, bytemuck::bytes_of(&args.black_level.push))
+        self.pass
+            .execute(encoder, bytemuck::bytes_of(&args.black_level.push))
     }
 }
 
+pub fn create_to_texture(
+    device: &Device,
+    params: &Params,
+    final_buffer: &Buffer,
+    texture: &Texture,
+) -> Result<FullComputePass, ExpansionError> {
+    let dispatch_size = [params.height as u32, params.width as u32, 1];
+    
+    let shader = params.shader_processor.process_by_name(
+        "to_texture",
+        ShaderSpecs::new((16, 16, 1))
+            .extend_defs([
+                ("HEIGHT", (params.height).into()),
+                ("WIDTH", (params.width).into()),
+                // ("HEIGHT", (params.height).into()),
+                // ("WIDTH", (params.width).into()),
+            ]).direct_dispatcher(&dispatch_size),
+    )?;
+
+    let pipeline = shader.build(device);
+
+    let view = &texture.create_view(&Default::default());
+
+    
+    
+    let bindgroup = [
+        BindGroupEntry {
+            binding: 0,
+            resource: final_buffer.as_entire_binding(),
+        },
+        BindGroupEntry {
+            binding: 1,
+            resource: gpwgpu::wgpu::BindingResource::TextureView(
+                &view,
+            ),
+        },
+    ];
+
+    let pass = FullComputePass::new(device, pipeline, &bindgroup);
+
+    Ok(pass)
+}

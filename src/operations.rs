@@ -7,6 +7,7 @@ use gpwgpu::{
     wgpu::{BindGroupEntry, BufferUsages, Device, Texture, Buffer},
     ExpansionError,
 };
+use macros::PlaygroundUi;
 
 use crate::setup::{ISPParams, Params};
 
@@ -121,9 +122,6 @@ impl SequentialOperation for Debayer {
         _buffers: &gpwgpu::automatic_buffers::BufferSolution<Self::BufferEnum>,
         args: &Self::Args,
     ) {
-        // if !args.debayer.enabled {
-        //     return;
-        // }
         let push = if args.debayer.enabled{
             1i32
         } else {

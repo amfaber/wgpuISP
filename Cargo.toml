@@ -1,5 +1,5 @@
 [workspace]
-members = ["viewer"]
+members = ["viewer", "macros"]
 
 [package]
 name = "wgpu_isp"
@@ -12,6 +12,7 @@ edition = "2021"
 [dependencies]
 bytemuck = { version = "1.14.0", features = ["derive"] }
 gpwgpu.workspace = true
+macros.path = "macros"
 
 
 [workspace.dependencies]

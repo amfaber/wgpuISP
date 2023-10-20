@@ -7,7 +7,7 @@ use gpwgpu::{
     wgpu::{BindGroupEntry, BufferUsages, Device, Texture, Buffer},
     ExpansionError,
 };
-use macros::PlaygroundUi;
+use macros::UiMarker;
 
 use crate::setup::{ISPParams, Params};
 
@@ -136,9 +136,10 @@ pub struct BlackLevel {
     pass: FullComputePass,
 }
 
-#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable, Default)]
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable, Default, UiMarker)]
 #[repr(C)]
 pub struct BlackLevelPush {
+    #[ui(min = 1, max = 50)]
     pub r_offset: f32,
     pub gr_offset: f32,
     pub gb_offset: f32,

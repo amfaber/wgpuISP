@@ -22,7 +22,7 @@ fn main(
 	let load = buffer[global_flat];
 	var rgb = load.rgb;
 	rgb /= 1200.;
-	rgb = pow(rgb, vec3(2.0));
+	rgb = pow(rgb, vec3(1.0));
 	
 	textureStore(texture, global_id.yx, vec4(rgb, load.w));
 }

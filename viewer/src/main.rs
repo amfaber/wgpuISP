@@ -9,7 +9,7 @@ use bevy::{
     },
 };
 use bevy_egui::{
-    egui::{self, Slider},
+    egui::{self, Slider, generate_loader_id, Ui, CollapsingHeader},
     EguiContexts, EguiPlugin,
 };
 use gpwgpu::{shaderpreprocessor::ShaderProcessor, utils::DebugEncoder, wgpu, FutureExt};
@@ -18,11 +18,13 @@ use viewer::{
     camera2d::{My2dCameraPlugin, My2dController},
     file_watcher::FilesystemWatcher,
     simple_renderer::{ImageSettings, SimpleRendererPlugin, StateImage},
+    ui_form::BoundedSlider,
 };
 use wgpu_isp::{
     operations::{BlackLevelParams, BlackLevelPush, DebayerParams},
     setup::{ISPParams, Params},
 };
+use macros::generate_ui_impl;
 
 pub fn device_descriptor() -> wgpu::DeviceDescriptor<'static> {
     let mut desc = wgpu::DeviceDescriptor::default();
@@ -30,6 +32,21 @@ pub fn device_descriptor() -> wgpu::DeviceDescriptor<'static> {
     desc.limits.max_push_constant_size = 64;
     desc.limits.max_storage_buffers_per_shader_stage = 12;
     return desc;
+}
+
+generate_ui_impl!{"src/operations.rs"}
+
+#[derive(Component)]
+struct UiState{
+    black_level: BlackLevelPushUi,
+}
+
+impl UiState{
+    fn new(mut ids: impl FnMut() -> usize) -> Self{
+        Self{
+            black_level: BlackLevelPushUi::new(ids()),
+        }
+    }
 }
 
 fn main() {
@@ -165,14 +182,7 @@ fn setup_scene(mut commands: Commands, device: Res<RenderDevice>, queue: Res<Ren
         debayer: DebayerParams { enabled: true },
         black_level: BlackLevelParams {
             enabled: true,
-            push: BlackLevelPush {
-                r_offset: 0.0,
-                gr_offset: 0.0,
-                gb_offset: 0.0,
-                b_offset: 0.0,
-                alpha: 0.0,
-                beta: 0.0,
-            },
+            push: BlackLevelPush::default(),
         },
     };
 
@@ -186,6 +196,8 @@ fn setup_scene(mut commands: Commands, device: Res<RenderDevice>, queue: Res<Ren
 
     let scale = 0.5;
 
+    let mut counter = 0;
+
     commands.spawn((
         state_image,
         SpatialBundle {
@@ -195,6 +207,11 @@ fn setup_scene(mut commands: Commands, device: Res<RenderDevice>, queue: Res<Ren
         image_settings,
         ShouldExecute(true),
         ParamsComponent(isp_params),
+        UiState::new(|| {
+            let cur = counter;
+            counter += 1;
+            cur
+        }),
     ));
 }
 
@@ -222,28 +239,16 @@ fn re_execute(mut query: Query<(&ParamsComponent, &mut ShouldExecute, &StateImag
 
 fn ui(
     mut egui_contexts: EguiContexts,
-    mut query: Query<(&mut ParamsComponent, &mut ShouldExecute)>,
+    mut query: Query<(&mut ParamsComponent, &mut ShouldExecute, &mut UiState)>,
 ) {
     let ctx = egui_contexts.ctx_mut();
 
     egui::SidePanel::left("primary_panel").show(ctx, |ui| {
-        for (mut params, mut should_execute) in &mut query {
+        for (mut params, mut should_execute, mut ui_state) in &mut query {
             should_execute.0 |= ui
                 .checkbox(&mut params.0.debayer.enabled, "Debayer")
                 .changed();
-
-            let slider = Slider::new(&mut params.0.black_level.push.r_offset, -100f32..=100f32);
-            should_execute.0 |= ui.add(slider).changed();
-            let slider = Slider::new(&mut params.0.black_level.push.gr_offset, -100f32..=100f32);
-            should_execute.0 |= ui.add(slider).changed();
-            let slider = Slider::new(&mut params.0.black_level.push.gb_offset, -100f32..=100f32);
-            should_execute.0 |= ui.add(slider).changed();
-            let slider = Slider::new(&mut params.0.black_level.push.b_offset, -100f32..=100f32);
-            should_execute.0 |= ui.add(slider).changed();
-            let slider = Slider::new(&mut params.0.black_level.push.alpha, -5f32..=5f32);
-            should_execute.0 |= ui.add(slider).changed();
-            let slider = Slider::new(&mut params.0.black_level.push.beta, -5f32..=5f32);
-            should_execute.0 |= ui.add(slider).changed();
+            should_execute.0 |= ui_state.black_level.show(ui, &mut params.0.black_level.push);
         }
     });
 }

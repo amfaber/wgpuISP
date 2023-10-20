@@ -2307,6 +2307,7 @@ dependencies = [
  "heck",
  "proc-macro2",
  "quote",
+ "rust-format",
  "syn 2.0.38",
 ]
 
@@ -3541,6 +3542,7 @@ dependencies = [
  "bytemuck",
  "crossbeam-channel",
  "gpwgpu",
+ "macros",
  "notify",
  "wgpu_isp",
 ]

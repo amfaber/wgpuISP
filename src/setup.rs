@@ -1,19 +1,14 @@
 use gpwgpu::{
     automatic_buffers::{register, AllOperations},
-    utils::{FullComputePass, DebugBundle, InspectBuffer},
+    shaderpreprocessor::{ShaderProcessor, ShaderError},
+    utils::{DebugBundle, FullComputePass, InspectBuffer},
     wgpu::{Device, Extent3d, Queue, Texture, TextureDescriptor, TextureDimension, TextureUsages},
-    ExpansionError, shaderpreprocessor::ShaderProcessor,
 };
 
 use crate::operations::{
-    create_to_texture, BlackLevel, BlackLevelParams, Buffers, Debayer, DebayerParams,
+    create_to_texture, AutoWhiteBalance, BlackLevel, Buffers, Debayer,
+    ISPParams, PreserveRaw, RGBSpaceOperations,
 };
-
-#[derive(Debug, Clone)]
-pub struct ISPParams {
-    pub debayer: DebayerParams,
-    pub black_level: BlackLevelParams,
-}
 
 #[derive(Debug, Clone)]
 pub struct Params {
@@ -29,7 +24,7 @@ impl Params {
     }
 }
 
-type StateError = ExpansionError;
+type StateError = ShaderError;
 
 pub struct State<'a> {
     pub device: &'a Device,
@@ -42,7 +37,13 @@ pub struct State<'a> {
 
 impl<'a> State<'a> {
     pub fn new(device: &'a Device, queue: &'a Queue, params: Params) -> Result<Self, StateError> {
-        let operations = vec![register::<BlackLevel>(), register::<Debayer>()];
+        let operations = vec![
+            register::<BlackLevel>(),
+            register::<AutoWhiteBalance>(),
+            register::<Debayer>(),
+            register::<RGBSpaceOperations>(),
+            register::<PreserveRaw>(),
+        ];
 
         let mut sequential = AllOperations::new(&params, operations)?;
         sequential.finalize(device, &params)?;
@@ -58,7 +59,6 @@ impl<'a> State<'a> {
             sample_count: 1,
             dimension: TextureDimension::D2,
             format: gpwgpu::wgpu::TextureFormat::Rgba32Float,
-            // format: gpwgpu::wgpu::TextureFormat::Rgba8Unorm,
             usage: TextureUsages::TEXTURE_BINDING | TextureUsages::STORAGE_BINDING,
             view_formats: &[],
         });
@@ -80,17 +80,15 @@ impl<'a> State<'a> {
         })
     }
 
-    pub fn write_to_input(&self, data: &[f32]){
+    pub fn write_to_input(&self, data: &[f32]) {
         let buf = self.sequential.buffers.get_from_any(Buffers::Raw);
         self.queue.write_buffer(buf, 0, bytemuck::cast_slice(data));
     }
 
-    pub fn reload(&self, params: Params) -> Result<Self, StateError>{
+    pub fn reload(&self, params: Params) -> Result<Self, StateError> {
         Self::new(&self.device, &self.queue, params)
     }
 }
-
-
 
 #[allow(unused)]
 pub fn make_debug_bundle<'a>(state: &'a State<'a>) -> DebugBundle<'a> {
@@ -109,13 +107,22 @@ pub fn make_debug_bundle<'a>(state: &'a State<'a>) -> DebugBundle<'a> {
                 "black_level",
             ),
             InspectBuffer::new(
+                state.sequential.buffers.get_from_any(Buffers::TempMean),
+                None,
+                "temp_mean",
+            ),
+            InspectBuffer::new(
+                state.sequential.buffers.get_from_any(Buffers::Mean),
+                None,
+                "mean",
+            ),
+            InspectBuffer::new(
                 state.sequential.buffers.get_from_any(Buffers::RGB),
                 None,
                 "output",
             ),
         ],
-        save_path: "../tests/dumps".into(),
+        save_path: "tests/dumps".into(),
         create_py: true,
     }
 }
-

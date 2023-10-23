@@ -1890,6 +1890,7 @@ dependencies = [
  "nom",
  "nom-supreme",
  "once_cell",
+ "pollster",
  "quote",
  "regex",
  "serde",
@@ -3541,9 +3542,11 @@ dependencies = [
  "bitflags 2.4.1",
  "bytemuck",
  "crossbeam-channel",
+ "glam",
  "gpwgpu",
  "macros",
  "notify",
+ "serde_json",
  "wgpu_isp",
 ]
 
@@ -3784,8 +3787,10 @@ name = "wgpu_isp"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
+ "glam",
  "gpwgpu",
  "macros",
+ "serde",
 ]
 
 [[package]]

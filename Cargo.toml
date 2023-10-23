@@ -11,9 +11,10 @@ edition = "2021"
 
 [dependencies]
 bytemuck = { version = "1.14.0", features = ["derive"] }
+glam = { version = "0.24.2", features = ["serde"] }
 gpwgpu.workspace = true
 macros.path = "macros"
-
+serde = { version = "1.0.189", features = ["derive"] }
 
 [workspace.dependencies]
 gpwgpu.path = "../gpwgpu"

@@ -56,6 +56,7 @@ unsafe impl Sync for SendState {}
 #[derive(Component)]
 pub struct StateImage {
     pub state: SendState,
+    pub cpu_side_data: Option<Vec<f32>>,
     pub bind_group: BindGroup,
     pub vertex_buffer: Buffer,
 }
@@ -69,7 +70,7 @@ pub struct ImageSettings{
 }
 
 impl StateImage {
-    pub fn new(state: ISPState<'static>) -> Self {
+    pub fn new(state: ISPState<'static>,) -> Self {
         let layout =
             state
                 .device
@@ -129,6 +130,7 @@ impl StateImage {
 
         Self {
             state: SendState(state),
+            cpu_side_data: None,
             bind_group: bind_group.into(),
             vertex_buffer: vertex_buffer.into(),
         }
@@ -145,6 +147,7 @@ fn extract_isp_image(
         &image_settings,
         StateImage {
             state: _,
+            cpu_side_data: _,
             bind_group,
             vertex_buffer,
         },

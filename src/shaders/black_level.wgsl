@@ -68,6 +68,6 @@ fn main(
 
 	let global_flat = (i32(global_id.x) * #WIDTH + i32(global_id.y));
 
-	output[global_flat] = new_val;
+	output[global_flat] = new_val / 30000.;
 }
 

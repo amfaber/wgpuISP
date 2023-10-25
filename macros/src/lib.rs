@@ -93,7 +93,7 @@ pub fn generate_ui_impl(input: TokenStream) -> TokenStream {
             let var_name = format_ident!("{}", snake_case);
             full_definition.extend(quote!(#var_name: #ui_struct_name,));
 
-            full_new.extend(quote!(#var_name: #ui_struct_name::new(&mut ids), ));
+            full_new.extend(quote!(#var_name: #ui_struct_name::new(ids), ));
 
             full_ui.extend(quote!(changed |= self.#var_name.show(ui, &mut data.#var_name);));
             
@@ -112,7 +112,7 @@ pub fn generate_ui_impl(input: TokenStream) -> TokenStream {
         }
 
         impl FullUi{
-            pub fn new(mut ids: impl FnMut() -> usize) -> Self{
+            pub fn new(ids: &mut impl FnMut() -> usize) -> Self{
                 Self{
                     #full_new
                 }

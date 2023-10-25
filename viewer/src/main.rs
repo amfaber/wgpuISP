@@ -1,15 +1,16 @@
 use std::{mem::size_of, ops::Deref, path::Path, str::FromStr, time::Duration};
 
 use bevy::{
+    diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     prelude::*,
     render::{
         renderer::{RenderDevice, RenderQueue},
         settings::WgpuSettings,
         RenderPlugin,
-    }, diagnostic::{LogDiagnosticsPlugin, FrameTimeDiagnosticsPlugin},
+    },
 };
 use bevy_egui::{
-    egui::{self, CollapsingHeader, Ui},
+    egui::{self, CollapsingHeader, TextEdit, Ui, Widget, Response},
     EguiContexts, EguiPlugin,
 };
 use bytemuck::cast_slice;
@@ -51,6 +52,7 @@ generate_ui_impl! {"src/operations.rs"}
 struct Field {
     content: String,
     err: Option<ErrString>,
+    id: usize,
 }
 
 impl Field {
@@ -68,6 +70,10 @@ impl Field {
                 None
             }
         }
+    }
+
+    fn single_line(&mut self, ui: &mut Ui) -> Response{
+        TextEdit::singleline(&mut self.content).id_source(self.id).ui(ui)
     }
 }
 
@@ -187,33 +193,6 @@ fn watch_for_shader_changes(
 struct ParamsComponent(ISPParams);
 
 fn setup_scene(mut commands: Commands) {
-    // let data = std::fs::read("../tests/test.RAW").unwrap();
-
-    // let data = data
-    //     .chunks(2)
-    //     .map(|chunk| u16::from_ne_bytes(chunk.try_into().unwrap()) as f32)
-    //     .collect::<Vec<_>>();
-
-    // let device =
-    //     unsafe { std::mem::transmute::<&wgpu::Device, &wgpu::Device>(device.wgpu_device()) };
-
-    // let queue = unsafe { std::mem::transmute::<&wgpu::Queue, &wgpu::Queue>(queue.deref()) };
-
-    // let params = Params {
-    //     width: 1920,
-    //     height: 1080,
-    //     shader_processor: ShaderProcessor::load_dir_dyn("../src/shaders").unwrap(),
-    // };
-
-    // let image_settings = ImageSettings {
-    //     size: Vec2::new(params.width as f32, params.height as f32),
-    //     anchor: Vec2::splat(0.0),
-    //     flip_x: true,
-    //     flip_y: true,
-    // };
-
-    // let state = wgpu_isp::setup::State::new(device, queue, params).unwrap();
-
     let isp_params = ISPParams {
         debayer_push: DebayerPush { enabled: 1 },
         black_level_push: BlackLevelPush::default(),
@@ -227,10 +206,6 @@ fn setup_scene(mut commands: Commands) {
         },
     };
 
-    // state.write_to_input(&data);
-
-    // let state_image = StateImage::new(state);
-
     commands
         .spawn(Camera2dBundle::default())
         .insert(My2dController::default());
@@ -239,36 +214,37 @@ fn setup_scene(mut commands: Commands) {
 
     let mut counter = 0;
 
+    let mut id_provider = || {
+        let cur = counter;
+        counter += 1;
+        cur
+    };
+
     commands.spawn((
-        // state_image,
-        // image_settings,
-        // NewInput(true),
         FrameChange::NewInput,
         SpatialBundle {
             transform: Transform::from_scale(Vec3::splat(scale)),
             ..default()
         },
-        // ShouldExecute(true),
         ParamsComponent(isp_params),
         UiComponent {
-            full_ui: FullUi::new(|| {
-                let cur = counter;
-                counter += 1;
-                cur
-            }),
+            full_ui: FullUi::new(&mut id_provider),
             in_out_json: Field::default(),
             file_input: InputUiState {
                 file: Field {
-                    content: "../tests/test.RAW".to_string(),
+                    content: r"C:\Users\andre\Downloads\MPV-cam1-left.raw".to_string(),
                     err: None,
+                    id: id_provider(),
                 },
                 width: Field {
-                    content: "1920".to_string(),
+                    content: "3840".to_string(),
                     err: None,
+                    id: id_provider(),
                 },
                 height: Field {
-                    content: "1080".to_string(),
+                    content: "2160".to_string(),
                     err: None,
+                    id: id_provider(),
                 },
             },
         },
@@ -346,6 +322,7 @@ fn json_line(
     should_execute: &mut Mut<ShouldExecute>,
 ) {
     ui.label("Load or save parameters to json");
+
     ui.text_edit_singleline(&mut ui_state.in_out_json.content);
     if let Some(err) = &ui_state.in_out_json.err {
         ui.label(format!("{}", err.deref()));
@@ -380,30 +357,22 @@ fn input_line(
     // state_image: &mut Mut<StateImage>,
 ) {
     ui.label("Enter a file input:");
-    if ui
-        .text_edit_singleline(&mut ui_state.file_input.file.content)
-        .changed()
-    {
+
+    if ui_state.file_input.file.single_line(ui).changed(){
         **new_input = FrameChange::NewInput;
     }
     if let Some(err) = &ui_state.file_input.file.err {
         ui.label(&err.0);
     }
 
-    if ui
-        .text_edit_singleline(&mut ui_state.file_input.width.content)
-        .changed()
-    {
+    if ui_state.file_input.width.single_line(ui).changed(){
         **new_input = FrameChange::NewInput;
     }
     if let Some(err) = &ui_state.file_input.width.err {
         ui.label(&err.0);
     }
 
-    if ui
-        .text_edit_singleline(&mut ui_state.file_input.height.content)
-        .changed()
-    {
+    if ui_state.file_input.height.single_line(ui).changed(){
         **new_input = FrameChange::NewInput;
     }
     if let Some(err) = &ui_state.file_input.height.err {
@@ -447,7 +416,6 @@ fn new_input(
                 };
 
                 if (width * height * size_of::<u16>() as i32) != data.len() as i32 {
-                    // dbg!((width * height * size_of::<f32>() as i32));
                     ui_component.file_input.file.err =
                         Some(ErrString("File size doesn't match dimensions".into()));
                     continue;
@@ -489,7 +457,8 @@ fn new_input(
                     .collect::<Vec<_>>();
 
                 state.write_to_input(&data);
-                let state_image = StateImage::new(state);
+                let mut state_image = StateImage::new(state);
+                state_image.cpu_side_data = Some(data);
 
                 commands
                     .entity(entity)
@@ -508,11 +477,13 @@ fn new_input(
 
                 should_execute.as_mut().unwrap().0 = true;
 
-                state_image.unwrap().state.0.write_to_input(&data);
+                let state = state_image.as_ref().unwrap();
+                state.state.0.write_to_input(&data);
+                // state.state.0.write_to_input(state.cpu_side_data.as_ref().unwrap());
             }
         }
 
-        *new_input = FrameChange::Reload;
+        *new_input = FrameChange::NotRequired;
     }
 }
 

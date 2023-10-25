@@ -93,7 +93,7 @@ pub fn generate_ui_impl(input: TokenStream) -> TokenStream {
             let var_name = format_ident!("{}", snake_case);
             full_definition.extend(quote!(#var_name: #ui_struct_name,));
 
-            full_new.extend(quote!(#var_name: #ui_struct_name::new(ids()), ));
+            full_new.extend(quote!(#var_name: #ui_struct_name::new(&mut ids), ));
 
             full_ui.extend(quote!(changed |= self.#var_name.show(ui, &mut data.#var_name);));
             
@@ -157,7 +157,7 @@ fn ui_element_by_type(ident: &Ident, title_case: &String, ty: &Type) -> (TokenSt
         (def, new)
     } else if ty == &mat4 || ty == &glam_mat4{
         let def = quote!(#ident: Mat4Slider,);
-        let new = quote!(#ident: Mat4Slider::new(#title_case.to_string(), -1., 2.),);
+        let new = quote!(#ident: Mat4Slider::new(#title_case.to_string(), -1., 2., ids()),);
 
         (def, new)
     } else {
@@ -215,10 +215,10 @@ fn playground_ui(input: ItemStruct) -> (TokenStream2, Ident, Ident) {
 
     let ui_impl = quote!(
         impl #ui_struct_name{
-            pub fn new(id: usize) -> Self{
+            pub fn new(ids: &mut impl FnMut() -> usize) -> Self{
                 Self{
                     #defaults
-                    id,
+                    id: ids(),
                 }
             }
             pub fn show(&mut self, ui: &mut Ui, data: &mut #struct_name) -> bool{

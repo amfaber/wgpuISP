@@ -1,4 +1,4 @@
-use std::{ops::Deref, time::Duration, path::Path};
+use std::{mem::size_of, ops::Deref, path::Path, str::FromStr, time::Duration};
 
 use bevy::{
     prelude::*,
@@ -6,13 +6,14 @@ use bevy::{
         renderer::{RenderDevice, RenderQueue},
         settings::WgpuSettings,
         RenderPlugin,
-    },
+    }, diagnostic::{LogDiagnosticsPlugin, FrameTimeDiagnosticsPlugin},
 };
 use bevy_egui::{
-    egui::{self, CollapsingHeader, Slider, Ui},
+    egui::{self, CollapsingHeader, Ui},
     EguiContexts, EguiPlugin,
 };
-use gpwgpu::{shaderpreprocessor::ShaderProcessor, utils::DebugEncoder, wgpu, FutureExt};
+use bytemuck::cast_slice;
+use gpwgpu::{shaderpreprocessor::ShaderProcessor, utils::DebugEncoder, wgpu};
 use macros::generate_ui_impl;
 use notify::{RecursiveMode, Watcher};
 use viewer::{
@@ -23,7 +24,7 @@ use viewer::{
 };
 use wgpu_isp::{
     operations::{
-        AutoWhiteBalancePush, BlackLevelPush, ColorCorrectionPush, DebayerPush, GammaPush,
+        AutoWhiteBalancePush, BlackLevelPush, Buffers, ColorCorrectionPush, DebayerPush, GammaPush,
         ISPParams,
     },
     setup::Params,
@@ -46,9 +47,41 @@ pub fn device_descriptor() -> wgpu::DeviceDescriptor<'static> {
 // UiAggregation (here ISPParams)
 generate_ui_impl! {"src/operations.rs"}
 
+#[derive(Default)]
+struct Field {
+    content: String,
+    err: Option<ErrString>,
+}
+
+impl Field {
+    fn parse<'a: 'b, 'b, T, E: std::fmt::Display>(
+        &'a mut self,
+        f: impl Fn(&'b str) -> Result<T, E>,
+    ) -> Option<T> {
+        match f(&self.content) {
+            Ok(parsed) => {
+                self.err = None;
+                Some(parsed)
+            }
+            Err(err) => {
+                self.err = Some(err.into());
+                None
+            }
+        }
+    }
+}
+
+#[derive(Default)]
+struct InputUiState {
+    file: Field,
+    width: Field,
+    height: Field,
+}
+
 #[derive(Component)]
 struct UiComponent {
-    in_out_json: (String, Option<ErrString>),
+    file_input: InputUiState,
+    in_out_json: Field,
     full_ui: FullUi,
 }
 
@@ -69,10 +102,15 @@ fn main() {
             SimpleRendererPlugin,
             My2dCameraPlugin,
             EguiPlugin,
+            LogDiagnosticsPlugin::default(),
+            FrameTimeDiagnosticsPlugin,
         ))
         .add_systems(Startup, setup_scene)
         .init_resource::<ThisFileWatcher>()
-        .add_systems(Update, (re_execute, ui, watch_for_shader_changes))
+        .add_systems(
+            Update,
+            (re_execute, ui, watch_for_shader_changes, new_input),
+        )
         .run();
 }
 
@@ -110,11 +148,6 @@ fn watch_for_shader_changes(
                 ..state.state.0.params
             };
 
-            // state
-            //     .state
-            //     .0
-            //     .device
-            //     .push_error_scope(wgpu::ErrorFilter::Validation);
             let new_state = match state.state.0.reload(params) {
                 Ok(state) => state,
                 Err(e) => {
@@ -122,10 +155,6 @@ fn watch_for_shader_changes(
                     continue;
                 }
             };
-            // if let Some(err) = state.state.0.device.pop_error_scope().block_on() {
-            //     println!("[{}:{}]\n{}", file!(), line!(), err);
-            //     continue;
-            // }
             let mut encoder = new_state.device.create_command_encoder(&default());
 
             let old_input = state
@@ -157,33 +186,33 @@ fn watch_for_shader_changes(
 #[derive(Component)]
 struct ParamsComponent(ISPParams);
 
-fn setup_scene(mut commands: Commands, device: Res<RenderDevice>, queue: Res<RenderQueue>) {
-    let data = std::fs::read("../tests/test.RAW").unwrap();
+fn setup_scene(mut commands: Commands) {
+    // let data = std::fs::read("../tests/test.RAW").unwrap();
 
-    let data = data
-        .chunks(2)
-        .map(|chunk| u16::from_ne_bytes(chunk.try_into().unwrap()) as f32)
-        .collect::<Vec<_>>();
+    // let data = data
+    //     .chunks(2)
+    //     .map(|chunk| u16::from_ne_bytes(chunk.try_into().unwrap()) as f32)
+    //     .collect::<Vec<_>>();
 
-    let device =
-        unsafe { std::mem::transmute::<&wgpu::Device, &wgpu::Device>(device.wgpu_device()) };
+    // let device =
+    //     unsafe { std::mem::transmute::<&wgpu::Device, &wgpu::Device>(device.wgpu_device()) };
 
-    let queue = unsafe { std::mem::transmute::<&wgpu::Queue, &wgpu::Queue>(queue.deref()) };
+    // let queue = unsafe { std::mem::transmute::<&wgpu::Queue, &wgpu::Queue>(queue.deref()) };
 
-    let params = Params {
-        width: 1920,
-        height: 1080,
-        shader_processor: ShaderProcessor::load_dir_dyn("../src/shaders").unwrap(),
-    };
+    // let params = Params {
+    //     width: 1920,
+    //     height: 1080,
+    //     shader_processor: ShaderProcessor::load_dir_dyn("../src/shaders").unwrap(),
+    // };
 
-    let image_settings = ImageSettings {
-        size: Vec2::new(params.width as f32, params.height as f32),
-        anchor: Vec2::splat(0.0),
-        flip_x: true,
-        flip_y: true,
-    };
+    // let image_settings = ImageSettings {
+    //     size: Vec2::new(params.width as f32, params.height as f32),
+    //     anchor: Vec2::splat(0.0),
+    //     flip_x: true,
+    //     flip_y: true,
+    // };
 
-    let state = wgpu_isp::setup::State::new(device, queue, params).unwrap();
+    // let state = wgpu_isp::setup::State::new(device, queue, params).unwrap();
 
     let isp_params = ISPParams {
         debayer_push: DebayerPush { enabled: 1 },
@@ -198,9 +227,9 @@ fn setup_scene(mut commands: Commands, device: Res<RenderDevice>, queue: Res<Ren
         },
     };
 
-    state.write_to_input(&data);
+    // state.write_to_input(&data);
 
-    let state_image = StateImage::new(state);
+    // let state_image = StateImage::new(state);
 
     commands
         .spawn(Camera2dBundle::default())
@@ -211,13 +240,15 @@ fn setup_scene(mut commands: Commands, device: Res<RenderDevice>, queue: Res<Ren
     let mut counter = 0;
 
     commands.spawn((
-        state_image,
+        // state_image,
+        // image_settings,
+        // NewInput(true),
+        FrameChange::NewInput,
         SpatialBundle {
             transform: Transform::from_scale(Vec3::splat(scale)),
             ..default()
         },
-        image_settings,
-        ShouldExecute(true),
+        // ShouldExecute(true),
         ParamsComponent(isp_params),
         UiComponent {
             full_ui: FullUi::new(|| {
@@ -225,13 +256,42 @@ fn setup_scene(mut commands: Commands, device: Res<RenderDevice>, queue: Res<Ren
                 counter += 1;
                 cur
             }),
-            in_out_json: (String::new(), None),
+            in_out_json: Field::default(),
+            file_input: InputUiState {
+                file: Field {
+                    content: "../tests/test.RAW".to_string(),
+                    err: None,
+                },
+                width: Field {
+                    content: "1920".to_string(),
+                    err: None,
+                },
+                height: Field {
+                    content: "1080".to_string(),
+                    err: None,
+                },
+            },
         },
     ));
 }
 
 #[derive(Component)]
 struct ShouldExecute(bool);
+
+/// This rebuilds the state
+// #[derive(Component)]
+// struct NewInput(bool);
+
+#[derive(Component, Clone, Copy)]
+enum FrameChange {
+    NotRequired,
+    NewInput,
+    Reload,
+}
+
+/// This uses the same state, but uploads a new image to the GPU
+// #[derive(Component)]
+// struct NewFrame(bool);
 
 fn re_execute(mut query: Query<(&ParamsComponent, &mut ShouldExecute, &StateImage)>) {
     for (params, mut should_execute, state) in &mut query {
@@ -262,61 +322,218 @@ impl Deref for ErrString {
     }
 }
 
-impl<T: ToString> From<T> for ErrString{
+impl<T: ToString> From<T> for ErrString {
     fn from(value: T) -> Self {
         Self(value.to_string())
     }
 }
 
-fn load_json(path: impl AsRef<Path>) -> Result<ISPParams, ErrString>{
+fn load_json(path: impl AsRef<Path>) -> Result<ISPParams, ErrString> {
     let contents = std::fs::read_to_string(path)?;
     Ok(serde_json::from_str::<ISPParams>(&contents)?)
 }
 
-fn save_json(path: impl AsRef<Path>, params: &ISPParams) -> Result<(), ErrString>{
+fn save_json(path: impl AsRef<Path>, params: &ISPParams) -> Result<(), ErrString> {
     let s = serde_json::to_string_pretty(params)?;
     std::fs::write(path, s)?;
     Ok(())
 }
 
+fn json_line(
+    ui: &mut Ui,
+    ui_state: &mut Mut<UiComponent>,
+    params: &mut Mut<ParamsComponent>,
+    should_execute: &mut Mut<ShouldExecute>,
+) {
+    ui.label("Load or save parameters to json");
+    ui.text_edit_singleline(&mut ui_state.in_out_json.content);
+    if let Some(err) = &ui_state.in_out_json.err {
+        ui.label(format!("{}", err.deref()));
+    }
+    ui.horizontal(|ui| {
+        if ui.button("Load").clicked() {
+            match load_json(&ui_state.in_out_json.content) {
+                Ok(loaded_params) => {
+                    params.0 = loaded_params;
+                    should_execute.0 |= true;
+                    ui_state.in_out_json.err = None;
+                }
+                Err(err_str) => ui_state.in_out_json.err = Some(err_str),
+            }
+        }
+        if ui.button("Save").clicked() {
+            match save_json(&ui_state.in_out_json.content, &params.0) {
+                Ok(()) => {
+                    ui_state.in_out_json.err = None;
+                }
+                Err(err_str) => ui_state.in_out_json.err = Some(err_str),
+            }
+        }
+    });
+}
+
+fn input_line(
+    ui: &mut Ui,
+    // new_input: &mut Mut<NewInput>,
+    new_input: &mut Mut<FrameChange>,
+    ui_state: &mut Mut<UiComponent>,
+    // state_image: &mut Mut<StateImage>,
+) {
+    ui.label("Enter a file input:");
+    if ui
+        .text_edit_singleline(&mut ui_state.file_input.file.content)
+        .changed()
+    {
+        **new_input = FrameChange::NewInput;
+    }
+    if let Some(err) = &ui_state.file_input.file.err {
+        ui.label(&err.0);
+    }
+
+    if ui
+        .text_edit_singleline(&mut ui_state.file_input.width.content)
+        .changed()
+    {
+        **new_input = FrameChange::NewInput;
+    }
+    if let Some(err) = &ui_state.file_input.width.err {
+        ui.label(&err.0);
+    }
+
+    if ui
+        .text_edit_singleline(&mut ui_state.file_input.height.content)
+        .changed()
+    {
+        **new_input = FrameChange::NewInput;
+    }
+    if let Some(err) = &ui_state.file_input.height.err {
+        ui.label(&err.0);
+    }
+}
+
+fn new_input(
+    mut commands: Commands,
+    mut query: Query<(
+        Entity,
+        &mut FrameChange,
+        &mut UiComponent,
+        Option<&mut StateImage>,
+        Option<&mut ShouldExecute>,
+    )>,
+    device: Res<RenderDevice>,
+    queue: Res<RenderQueue>,
+) {
+    for (entity, mut new_input, mut ui_component, state_image, mut should_execute) in &mut query {
+        if matches!(*new_input, FrameChange::NotRequired) {
+            continue;
+        }
+
+        match *new_input {
+            FrameChange::NotRequired => continue,
+            FrameChange::NewInput => {
+                let data = ui_component.file_input.file.parse(std::fs::read);
+                let width = ui_component
+                    .file_input
+                    .width
+                    .parse(<i32 as FromStr>::from_str);
+
+                let height = ui_component
+                    .file_input
+                    .height
+                    .parse(<i32 as FromStr>::from_str);
+
+                let (Some(data), Some(width), Some(height)) = (data, width, height) else {
+                    continue;
+                };
+
+                if (width * height * size_of::<u16>() as i32) != data.len() as i32 {
+                    // dbg!((width * height * size_of::<f32>() as i32));
+                    ui_component.file_input.file.err =
+                        Some(ErrString("File size doesn't match dimensions".into()));
+                    continue;
+                }
+
+                let shader_processor = match ShaderProcessor::load_dir_dyn("../src/shaders") {
+                    Ok(processor) => processor,
+                    Err(e) => {
+                        dbg!(e);
+                        continue;
+                    }
+                };
+
+                let params = Params {
+                    width,
+                    height,
+                    shader_processor,
+                };
+
+                let image_settings = ImageSettings {
+                    size: Vec2::new(params.width as f32, params.height as f32),
+                    anchor: Vec2::splat(0.0),
+                    flip_x: false,
+                    flip_y: false,
+                };
+
+                let device = unsafe {
+                    std::mem::transmute::<&wgpu::Device, &wgpu::Device>(device.wgpu_device())
+                };
+
+                let queue =
+                    unsafe { std::mem::transmute::<&wgpu::Queue, &wgpu::Queue>(queue.deref()) };
+
+                let state = wgpu_isp::setup::State::new(device, queue, params).unwrap();
+
+                let data = data
+                    .chunks(2)
+                    .map(|chunk| u16::from_ne_bytes(chunk.try_into().unwrap()) as f32)
+                    .collect::<Vec<_>>();
+
+                state.write_to_input(&data);
+                let state_image = StateImage::new(state);
+
+                commands
+                    .entity(entity)
+                    .insert(state_image)
+                    .insert(image_settings)
+                    .insert(ShouldExecute(true));
+            }
+            FrameChange::Reload => {
+                let Some(data) = ui_component.file_input.file.parse(std::fs::read) else {
+                    continue;
+                };
+                let data = data
+                    .chunks(2)
+                    .map(|chunk| u16::from_ne_bytes(chunk.try_into().unwrap()) as f32)
+                    .collect::<Vec<_>>();
+
+                should_execute.as_mut().unwrap().0 = true;
+
+                state_image.unwrap().state.0.write_to_input(&data);
+            }
+        }
+
+        *new_input = FrameChange::Reload;
+    }
+}
+
 fn ui(
     mut egui_contexts: EguiContexts,
-    mut query: Query<(&mut ParamsComponent, &mut ShouldExecute, &mut UiComponent)>,
+    mut query: Query<(
+        &mut ParamsComponent,
+        &mut ShouldExecute,
+        &mut UiComponent,
+        &mut FrameChange,
+    )>,
 ) {
     let ctx = egui_contexts.ctx_mut();
 
     egui::SidePanel::left("primary_panel").show(ctx, |ui| {
         egui::ScrollArea::vertical().show(ui, |ui| {
-            for (mut params, mut should_execute, mut ui_state) in &mut query {
-                ui.label("Load or save parameters to json");
-                ui.text_edit_singleline(&mut ui_state.in_out_json.0);
-                if let Some(err) = &ui_state.in_out_json.1{
-                    ui.label(format!("{}", err.deref()));
-                }
-                ui.horizontal(|ui|{
-                    if ui.button("Load").clicked(){
-                        match load_json(&ui_state.in_out_json.0){
-                            Ok(loaded_params) => {
-                                params.0 = loaded_params;
-                                ui_state.in_out_json.1 = None;
-                            },
-                            Err(err_str) => {
-                                ui_state.in_out_json.1 = Some(err_str)
-                            }
-                        }
-                    }
-                    if ui.button("Save").clicked(){
-                        match save_json(&ui_state.in_out_json.0, &params.0){
-                            Ok(()) => {
-                                ui_state.in_out_json.1 = None;
-                            },
-                            Err(err_str) => {
-                                ui_state.in_out_json.1 = Some(err_str)
-                            }
-                        }
-                    }
-                });
-                should_execute.0 = ui_state.full_ui.show(ui, &mut params.0);
+            for (mut params, mut should_execute, mut ui_state, mut new_input) in &mut query {
+                input_line(ui, &mut new_input, &mut ui_state);
+                json_line(ui, &mut ui_state, &mut params, &mut should_execute);
+
+                should_execute.0 |= ui_state.full_ui.show(ui, &mut params.0);
             }
         })
     });

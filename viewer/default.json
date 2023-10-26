@@ -1,0 +1,40 @@
+{
+  "debayer_push": {
+    "enabled": 1
+  },
+  "black_level_push": {
+    "r_offset": 0.0,
+    "gr_offset": 0.0,
+    "gb_offset": 0.0,
+    "b_offset": 0.0,
+    "alpha": 0.0,
+    "beta": 0.0
+  },
+  "auto_white_balance_push": {
+    "gain": 1.0
+  },
+  "gamma_push": {
+    "gain": 1.0,
+    "gamma": 1.0
+  },
+  "color_correction_push": {
+    "color_correction_matrix": [
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  }
+}

@@ -246,7 +246,7 @@ fn setup_scene(mut commands: Commands) {
             in_out_json: Field::default(),
             file_input: InputUiState {
                 file: Field {
-                    content: r"/home/amfaber/Downloads/MPV-cam1-left.raw".to_string(),
+                    content: r"C:\Users\andre\Downloads\MPV-cam1-left.raw".to_string(),
                     err: None,
                     id: id_provider(),
                 },

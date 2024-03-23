@@ -240,12 +240,13 @@ fn setup_scene(mut commands: Commands) {
             ..default()
         },
         ParamsComponent(isp_params),
+        ShouldExecute(true),
         UiComponent {
             full_ui: FullUi::new(&mut id_provider),
             in_out_json: Field::default(),
             file_input: InputUiState {
                 file: Field {
-                    content: r"C:\Users\andre\Downloads\MPV-cam1-left.raw".to_string(),
+                    content: r"/home/amfaber/Downloads/MPV-cam1-left.raw".to_string(),
                     err: None,
                     id: id_provider(),
                 },
@@ -489,6 +490,7 @@ fn ui(
         egui::ScrollArea::vertical().show(ui, |ui| {
             for (mut params, mut should_execute, mut ui_state, mut new_input) in &mut query {
                 input_line(ui, &mut new_input, &mut ui_state);
+                
                 json_line(ui, &mut ui_state, &mut params, &mut should_execute);
 
                 should_execute.0 |= ui_state.full_ui.show(ui, &mut params.0);

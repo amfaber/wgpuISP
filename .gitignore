@@ -1,3 +1,5 @@
 /target
 *.bin
 *.pyc
+video.ts
+output.nv12

@@ -6,13 +6,10 @@ use gpwgpu::wgpu::{
 use wgpu_isp::setup::State as ISPState;
 
 use bevy::{
-    core_pipeline::core_2d::Transparent2d,
-    ecs::system::{
+    asset::load_internal_asset, core_pipeline::core_2d::Transparent2d, ecs::system::{
         lifetimeless::{Read, SRes},
         SystemParamItem,
-    },
-    prelude::*,
-    render::{
+    }, prelude::*, render::{
         render_phase::{
             AddRenderCommand, DrawFunctions, PhaseItem, RenderCommand, RenderCommandResult,
             RenderPhase, SetItemPipeline, TrackedRenderPass,
@@ -23,16 +20,21 @@ use bevy::{
         renderer::{RenderDevice, RenderQueue},
         view::{ViewUniformOffset, ViewUniforms, VisibleEntities},
         Extract, Render, RenderApp, RenderSet,
-    },
-    utils::FloatOrd,
+    }, utils::FloatOrd
 };
 
-use crate::my_sprite_pipeline::{SpritePipeline, SpritePipelineKey, SpriteVertex, QUAD_VERTEX_POSITIONS, QUAD_UVS, QUAD_INDICES};
+use crate::my_sprite_pipeline::{SpritePipeline, SpritePipelineKey, SpriteVertex, QUAD_INDICES, QUAD_UVS, QUAD_VERTEX_POSITIONS, SPRITE_SHADER_HANDLE};
 
 pub struct SimpleRendererPlugin;
 
 impl Plugin for SimpleRendererPlugin {
     fn build(&self, app: &mut App) {
+        load_internal_asset!(
+            app,
+            SPRITE_SHADER_HANDLE,
+            "my_sprite.wgsl",
+            Shader::from_wgsl
+        );
         app.insert_resource(Msaa::Off);
 
         app.sub_app_mut(RenderApp)
@@ -199,14 +201,14 @@ fn queue(
 
     let Some(view_binding) = view_uniforms.uniforms.binding() else { return };
 
-    let view_bind_group = render_device.create_bind_group(&BindGroupDescriptor {
-        entries: &[BindGroupEntry {
+    let view_bind_group = render_device.create_bind_group(
+        Some("sprite_view_bind_group"),
+        &sprite_pipeline.view_layout,
+        &[BindGroupEntry {
             binding: 0,
             resource: view_binding,
-        }],
-        label: Some("sprite_view_bind_group"),
-        layout: &sprite_pipeline.view_layout,
-    });
+        }]
+    );
 
     view_uniforms_bindgroup.0 = Some(view_bind_group);
 
@@ -245,7 +247,8 @@ fn queue(
                     entity: isp_image.entity,
                     pipeline,
                     draw_function,
-                    batch_range: None,
+                    batch_range: 0..1,
+                    dynamic_offset: None,
                 })
             }
         }
@@ -262,13 +265,13 @@ type DrawIsp = (
 pub struct SetIspViewBindGroup<const I: usize>;
 impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetIspViewBindGroup<I> {
     type Param = SRes<ViewUniformsResource>;
-    type ViewWorldQuery = Read<ViewUniformOffset>;
-    type ItemWorldQuery = ();
+    type ViewQuery = Read<ViewUniformOffset>;
+    type ItemQuery = ();
 
     fn render<'w>(
         _item: &P,
         view_uniform: &'_ ViewUniformOffset,
-        _entity: (),
+        _entity: Option<()>,
         bind_group: SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
@@ -286,18 +289,18 @@ pub struct SetIspTextureBindGroup<const I: usize>;
 impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetIspTextureBindGroup<I> {
     type Param = ();
 
-    type ViewWorldQuery = ();
+    type ViewQuery = ();
 
-    type ItemWorldQuery = Read<IspImage>;
+    type ItemQuery = Read<IspImage>;
 
     fn render<'w>(
         _item: &P,
-        _view: bevy::ecs::query::ROQueryItem<'w, Self::ViewWorldQuery>,
-        image: bevy::ecs::query::ROQueryItem<'w, Self::ItemWorldQuery>,
+        _view: bevy::ecs::query::ROQueryItem<'w, Self::ViewQuery>,
+        image: Option<bevy::ecs::query::ROQueryItem<'w, Self::ItemQuery>>,
         _param: SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
-        pass.set_bind_group(I, &image.bind_group, &[]);
+        pass.set_bind_group(I, &image.unwrap().bind_group, &[]);
         RenderCommandResult::Success
     }
 }
@@ -307,18 +310,18 @@ pub struct DrawIspCommand;
 impl<P: PhaseItem> RenderCommand<P> for DrawIspCommand {
     type Param = ();
 
-    type ViewWorldQuery = ();
+    type ViewQuery = ();
 
-    type ItemWorldQuery = Read<IspImage>;
+    type ItemQuery = Read<IspImage>;
 
     fn render<'w>(
         _item: &P,
-        _view: bevy::ecs::query::ROQueryItem<'w, Self::ViewWorldQuery>,
-        isp_image: bevy::ecs::query::ROQueryItem<'w, Self::ItemWorldQuery>,
+        _view: bevy::ecs::query::ROQueryItem<'w, Self::ViewQuery>,
+        isp_image: Option<bevy::ecs::query::ROQueryItem<'w, Self::ItemQuery>>,
         _param: SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
-        pass.set_vertex_buffer(0, isp_image.vertex_buffer.slice(..));
+        pass.set_vertex_buffer(0, isp_image.unwrap().vertex_buffer.slice(..));
 
         pass.draw(0..6, 0..1);
         RenderCommandResult::Success

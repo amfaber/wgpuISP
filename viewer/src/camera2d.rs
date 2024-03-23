@@ -103,7 +103,7 @@ fn move_camera_to_fix_point(
 }
 
 fn camera_control_2d(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut mouse_wheel_reader: EventReader<MouseWheel>,
     mut touchpad_magnify: EventReader<TouchpadMagnify>,
     mut controllers: Query<
@@ -117,7 +117,7 @@ fn camera_control_2d(
         (Without<Old>, Without<New>),
     >,
     time: Res<Time>,
-    mouse_input: Res<Input<MouseButton>>,
+    mouse_input: Res<ButtonInput<MouseButton>>,
 
 	window: Query<&Window, With<PrimaryWindow>>,
 ) {
@@ -154,23 +154,23 @@ fn camera_control_2d(
         if shift_pressed {
             for key in keyboard.get_pressed() {
                 match key {
-                    KeyCode::A => {
+                    KeyCode::KeyA => {
                         locomotion_dir.x -= 1.0;
                     }
-                    KeyCode::D => {
+                    KeyCode::KeyD => {
                         locomotion_dir.x += 1.0;
                     }
-                    KeyCode::S => {
+                    KeyCode::KeyS => {
                         locomotion_dir.y -= 1.0;
                     }
-                    KeyCode::W => {
+                    KeyCode::KeyW => {
                         locomotion_dir.y += 1.0;
                     }
 
-                    KeyCode::E => {
+                    KeyCode::KeyE => {
                         wheel_delta += 1.0;
                     }
-                    KeyCode::Q => {
+                    KeyCode::KeyQ => {
                         wheel_delta -= 1.0;
                     }
                     _ => {}
@@ -178,14 +178,14 @@ fn camera_control_2d(
             }
         }
 
-        for event in mouse_wheel_reader.iter() {
+        for event in mouse_wheel_reader.read() {
             wheel_delta += match event.unit {
                 MouseScrollUnit::Line => event.y,
                 MouseScrollUnit::Pixel => event.y / controller.pixels_per_line,
             };
         }
 
-        for event in touchpad_magnify.iter() {
+        for event in touchpad_magnify.read() {
             wheel_delta += event.0 * controller.pinch_sensitivity;
         }
 

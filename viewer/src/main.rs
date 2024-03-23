@@ -10,10 +10,9 @@ use bevy::{
     },
 };
 use bevy_egui::{
-    egui::{self, CollapsingHeader, TextEdit, Ui, Widget, Response},
+    egui::{self, CollapsingHeader, Response, TextEdit, Ui, Widget},
     EguiContexts, EguiPlugin,
 };
-use bytemuck::cast_slice;
 use gpwgpu::{shaderpreprocessor::ShaderProcessor, utils::DebugEncoder, wgpu};
 use macros::generate_ui_impl;
 use notify::{RecursiveMode, Watcher};
@@ -25,7 +24,7 @@ use viewer::{
 };
 use wgpu_isp::{
     operations::{
-        AutoWhiteBalancePush, BlackLevelPush, Buffers, ColorCorrectionPush, DebayerPush, GammaPush,
+        AutoWhiteBalancePush, BlackLevelPush, ColorCorrectionPush, DebayerPush, GammaPush,
         ISPParams,
     },
     setup::Params,
@@ -33,9 +32,10 @@ use wgpu_isp::{
 
 pub fn device_descriptor() -> wgpu::DeviceDescriptor<'static> {
     let mut desc = wgpu::DeviceDescriptor::default();
-    desc.features = wgpu::Features::MAPPABLE_PRIMARY_BUFFERS | wgpu::Features::PUSH_CONSTANTS;
-    desc.limits.max_push_constant_size = 100;
-    desc.limits.max_storage_buffers_per_shader_stage = 12;
+    desc.required_features =
+        wgpu::Features::MAPPABLE_PRIMARY_BUFFERS | wgpu::Features::PUSH_CONSTANTS;
+    desc.required_limits.max_push_constant_size = 100;
+    desc.required_limits.max_storage_buffers_per_shader_stage = 12;
     return desc;
 }
 
@@ -72,8 +72,19 @@ impl Field {
         }
     }
 
-    fn single_line(&mut self, ui: &mut Ui) -> Response{
-        TextEdit::singleline(&mut self.content).id_source(self.id).ui(ui)
+    fn single_line(&mut self, ui: &mut Ui) -> Response {
+        TextEdit::singleline(&mut self.content)
+            .id_source(self.id)
+            .ui(ui)
+    }
+
+    fn run_on_changed(&mut self, ui: &mut Ui, mut f: impl FnMut()) {
+        if self.single_line(ui).changed() {
+            f()
+        }
+        if let Some(err) = &self.err {
+            ui.label(&err.0);
+        }
     }
 }
 
@@ -95,11 +106,13 @@ fn main() {
     let default_plugins = DefaultPlugins.build().set({
         let device_descriptor = device_descriptor();
         RenderPlugin {
-            wgpu_settings: WgpuSettings {
-                features: device_descriptor.features,
-                limits: device_descriptor.limits,
+            // wgpu_settings: ,
+            render_creation: bevy::render::settings::RenderCreation::Automatic(WgpuSettings {
+                features: device_descriptor.required_features,
+                limits: device_descriptor.required_limits,
                 ..Default::default()
-            },
+            }),
+            synchronous_pipeline_compilation: false,
         }
     });
     App::new()
@@ -254,20 +267,12 @@ fn setup_scene(mut commands: Commands) {
 #[derive(Component)]
 struct ShouldExecute(bool);
 
-/// This rebuilds the state
-// #[derive(Component)]
-// struct NewInput(bool);
-
 #[derive(Component, Clone, Copy)]
 enum FrameChange {
     NotRequired,
     NewInput,
     Reload,
 }
-
-/// This uses the same state, but uploads a new image to the GPU
-// #[derive(Component)]
-// struct NewFrame(bool);
 
 fn re_execute(mut query: Query<(&ParamsComponent, &mut ShouldExecute, &StateImage)>) {
     for (params, mut should_execute, state) in &mut query {
@@ -349,35 +354,22 @@ fn json_line(
     });
 }
 
-fn input_line(
-    ui: &mut Ui,
-    // new_input: &mut Mut<NewInput>,
-    new_input: &mut Mut<FrameChange>,
-    ui_state: &mut Mut<UiComponent>,
-    // state_image: &mut Mut<StateImage>,
-) {
+fn input_line(ui: &mut Ui, new_input: &mut Mut<FrameChange>, ui_state: &mut Mut<UiComponent>) {
     ui.label("Enter a file input:");
+    let mut set_new_input = || **new_input = FrameChange::NewInput;
 
-    if ui_state.file_input.file.single_line(ui).changed(){
-        **new_input = FrameChange::NewInput;
-    }
-    if let Some(err) = &ui_state.file_input.file.err {
-        ui.label(&err.0);
-    }
-
-    if ui_state.file_input.width.single_line(ui).changed(){
-        **new_input = FrameChange::NewInput;
-    }
-    if let Some(err) = &ui_state.file_input.width.err {
-        ui.label(&err.0);
-    }
-
-    if ui_state.file_input.height.single_line(ui).changed(){
-        **new_input = FrameChange::NewInput;
-    }
-    if let Some(err) = &ui_state.file_input.height.err {
-        ui.label(&err.0);
-    }
+    ui_state
+        .file_input
+        .file
+        .run_on_changed(ui, &mut set_new_input);
+    ui_state
+        .file_input
+        .width
+        .run_on_changed(ui, &mut set_new_input);
+    ui_state
+        .file_input
+        .height
+        .run_on_changed(ui, &mut set_new_input);
 }
 
 fn new_input(
@@ -393,10 +385,6 @@ fn new_input(
     queue: Res<RenderQueue>,
 ) {
     for (entity, mut new_input, mut ui_component, state_image, mut should_execute) in &mut query {
-        if matches!(*new_input, FrameChange::NotRequired) {
-            continue;
-        }
-
         match *new_input {
             FrameChange::NotRequired => continue,
             FrameChange::NewInput => {
@@ -479,7 +467,6 @@ fn new_input(
 
                 let state = state_image.as_ref().unwrap();
                 state.state.0.write_to_input(&data);
-                // state.state.0.write_to_input(state.cpu_side_data.as_ref().unwrap());
             }
         }
 

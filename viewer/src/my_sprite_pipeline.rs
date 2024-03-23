@@ -1,4 +1,5 @@
 use bevy::{
+    core::{Pod, Zeroable},
     ecs::system::SystemState,
     prelude::*,
     render::{
@@ -12,15 +13,16 @@ use bevy::{
         },
         view::{ViewTarget, ViewUniform},
     },
-    sprite::SPRITE_SHADER_HANDLE, core::{Zeroable, Pod},
 };
 use gpwgpu::wgpu::{
-    BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, BlendState, BufferBindingType,
-    ColorTargetState, ColorWrites, FrontFace, ImageCopyTexture, ImageDataLayout, MultisampleState,
-    Origin3d, PolygonMode, PrimitiveState, PrimitiveTopology, SamplerBindingType, ShaderStages,
+    BindGroupLayoutEntry, BindingType, BlendState, BufferBindingType, ColorTargetState,
+    ColorWrites, FrontFace, ImageCopyTexture, ImageDataLayout, MultisampleState, Origin3d,
+    PolygonMode, PrimitiveState, PrimitiveTopology, SamplerBindingType, ShaderStages,
     TextureAspect, TextureFormat, TextureSampleType, TextureViewDescriptor, TextureViewDimension,
     VertexFormat, VertexStepMode,
 };
+
+pub const SPRITE_SHADER_HANDLE: Handle<Shader> = Handle::weak_from_u128(2763341453151597127);
 
 pub const QUAD_INDICES: [usize; 6] = [0, 2, 3, 0, 1, 2];
 
@@ -54,8 +56,9 @@ impl FromWorld for SpritePipeline {
         )> = SystemState::new(world);
         let (render_device, default_sampler, render_queue) = system_state.get_mut(world);
 
-        let view_layout = render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            entries: &[BindGroupLayoutEntry {
+        let view_layout = render_device.create_bind_group_layout(
+            Some("sprite_view_layout"),
+            &[BindGroupLayoutEntry {
                 binding: 0,
                 visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
                 ty: BindingType::Buffer {
@@ -65,11 +68,23 @@ impl FromWorld for SpritePipeline {
                 },
                 count: None,
             }],
-            label: Some("sprite_view_layout"),
-        });
+            // &BindGroupLayoutDescriptor {
+            // entries: &[BindGroupLayoutEntry {
+            //     binding: 0,
+            //     visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+            //     ty: BindingType::Buffer {
+            //         ty: BufferBindingType::Uniform,
+            //         has_dynamic_offset: true,
+            //         min_binding_size: Some(ViewUniform::min_size()),
+            //     },
+            //     count: None,
+            // }],
+            // label: Some("sprite_view_layout"),
+        );
 
-        let material_layout = render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            entries: &[
+        let material_layout = render_device.create_bind_group_layout(
+            Some("sprite_material_layout"),
+            &[
                 BindGroupLayoutEntry {
                     binding: 0,
                     visibility: ShaderStages::FRAGMENT,
@@ -86,15 +101,17 @@ impl FromWorld for SpritePipeline {
                     ty: BindingType::Sampler(SamplerBindingType::Filtering),
                     count: None,
                 },
-            ],
-            label: Some("sprite_material_layout"),
-        });
+            ], // entries: ,
+               // label: Some("sprite_material_layout"),
+        );
         let dummy_white_gpu_image = {
             let image = Image::default();
             let texture = render_device.create_texture(&image.texture_descriptor);
-            let sampler = match image.sampler_descriptor {
+            let sampler = match image.sampler {
                 ImageSampler::Default => (**default_sampler).clone(),
-                ImageSampler::Descriptor(descriptor) => render_device.create_sampler(&descriptor),
+                ImageSampler::Descriptor(descriptor) => {
+                    render_device.create_sampler(&descriptor.as_wgpu())
+                }
             };
 
             let format_size = image.texture_descriptor.format.pixel_size();
@@ -258,13 +275,13 @@ impl SpecializedRenderPipeline for SpritePipeline {
 
         RenderPipelineDescriptor {
             vertex: VertexState {
-                shader: SPRITE_SHADER_HANDLE.typed::<Shader>(),
+                shader: SPRITE_SHADER_HANDLE,
                 entry_point: "vertex".into(),
                 shader_defs: shader_defs.clone(),
                 buffers: vec![vertex_layout],
             },
             fragment: Some(FragmentState {
-                shader: SPRITE_SHADER_HANDLE.typed::<Shader>(),
+                shader: SPRITE_SHADER_HANDLE,
                 shader_defs,
                 entry_point: "fragment".into(),
                 targets: vec![Some(ColorTargetState {
@@ -301,4 +318,3 @@ pub struct SpriteVertex {
     pub position: [f32; 3],
     pub uv: [f32; 2],
 }
-

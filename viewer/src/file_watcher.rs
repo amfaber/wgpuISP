@@ -1,4 +1,4 @@
-use bevy::{utils::{default, Duration, HashMap, HashSet}, prelude::Resource};
+use bevy::utils::{default, Duration, HashMap, HashSet};
 use crossbeam_channel::Receiver;
 use notify::{Event, RecommendedWatcher, RecursiveMode, Result, Watcher};
 use std::path::{Path, PathBuf};
@@ -37,6 +37,4 @@ impl FilesystemWatcher {
         self.watcher
             .watch(to_watch.as_ref(), RecursiveMode::Recursive)
     }
-
 }
-

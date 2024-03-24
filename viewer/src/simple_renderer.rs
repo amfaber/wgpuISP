@@ -1,29 +1,38 @@
+use std::io::Read as _;
+
 use gpwgpu::wgpu::{
-    BindGroupDescriptor, BindGroupEntry, BindGroupLayoutEntry,
-    BufferUsages, ShaderStages,
-    TextureViewDescriptor, SamplerDescriptor, FilterMode, BufferDescriptor,
+    self, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutEntry, BufferDescriptor,
+    BufferUsages, CommandEncoderDescriptor, Extent3d, FilterMode, ImageCopyTexture,
+    ImageDataLayout, Origin3d, SamplerDescriptor, ShaderStages, TextureDescriptor, TextureUsages,
+    TextureViewDescriptor,
 };
 use wgpu_isp::setup::State as ISPState;
 
 use bevy::{
-    asset::load_internal_asset, core_pipeline::core_2d::Transparent2d, ecs::system::{
+    asset::load_internal_asset,
+    core_pipeline::core_2d::Transparent2d,
+    ecs::system::{
         lifetimeless::{Read, SRes},
         SystemParamItem,
-    }, prelude::*, render::{
+    },
+    prelude::*,
+    render::{
         render_phase::{
             AddRenderCommand, DrawFunctions, PhaseItem, RenderCommand, RenderCommandResult,
             RenderPhase, SetItemPipeline, TrackedRenderPass,
         },
-        render_resource::{
-            BindGroup, Buffer, PipelineCache, SpecializedRenderPipelines,
-        },
+        render_resource::{BindGroup, Buffer, PipelineCache, SpecializedRenderPipelines},
         renderer::{RenderDevice, RenderQueue},
         view::{ViewUniformOffset, ViewUniforms, VisibleEntities},
         Extract, Render, RenderApp, RenderSet,
-    }, utils::FloatOrd
+    },
+    utils::FloatOrd,
 };
 
-use crate::my_sprite_pipeline::{SpritePipeline, SpritePipelineKey, SpriteVertex, QUAD_INDICES, QUAD_UVS, QUAD_VERTEX_POSITIONS, SPRITE_SHADER_HANDLE};
+use crate::my_sprite_pipeline::{
+    SpritePipeline, SpritePipelineKey, SpriteVertex, QUAD_INDICES, QUAD_UVS, QUAD_VERTEX_POSITIONS,
+    SPRITE_SHADER_HANDLE,
+};
 
 pub struct SimpleRendererPlugin;
 
@@ -50,21 +59,16 @@ impl Plugin for SimpleRendererPlugin {
     }
 }
 
-pub struct SendState(pub ISPState<'static>);
-
-unsafe impl Send for SendState {}
-unsafe impl Sync for SendState {}
-
 #[derive(Component)]
 pub struct StateImage {
-    pub state: SendState,
+    pub state: ISPState<'static>,
     pub cpu_side_data: Option<Vec<f32>>,
     pub bind_group: BindGroup,
     pub vertex_buffer: Buffer,
 }
 
 #[derive(Component, Clone, Copy)]
-pub struct ImageSettings{
+pub struct ImageSettings {
     pub size: Vec2,
     pub anchor: Vec2,
     pub flip_x: bool,
@@ -72,7 +76,7 @@ pub struct ImageSettings{
 }
 
 impl StateImage {
-    pub fn new(state: ISPState<'static>,) -> Self {
+    pub fn new(state: ISPState<'static>) -> Self {
         let layout =
             state
                 .device
@@ -101,11 +105,63 @@ impl StateImage {
                         },
                     ],
                 });
-        let sampler = state.device.create_sampler(&SamplerDescriptor{
+        let sampler = state.device.create_sampler(&SamplerDescriptor {
             mag_filter: FilterMode::Nearest,
             min_filter: FilterMode::Linear,
             ..default()
         });
+
+        // let view = {
+        //     let mut file = std::fs::File::open("../left.rgba").unwrap();
+
+        //     let width = 3840;
+        //     let height = 2160;
+
+        //     let mut buf = vec![0; width * height * 4];
+        //     file.read_exact(&mut buf).unwrap();
+
+        //     let size = Extent3d {
+        //         width: width as u32,
+        //         height: height as u32,
+        //         depth_or_array_layers: 1,
+        //     };
+        //     let rgba_texture = state.device.create_texture(&TextureDescriptor {
+        //         label: Some("rgba texture"),
+        //         size,
+        //         mip_level_count: 1,
+        //         sample_count: 1,
+        //         dimension: wgpu::TextureDimension::D2,
+        //         format: wgpu::TextureFormat::Rgba8Unorm,
+        //         usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+        //         view_formats: &[wgpu::TextureFormat::Rgba8Unorm],
+        //     });
+        //     state.queue.write_texture(
+        //         ImageCopyTexture {
+        //             texture: &rgba_texture,
+        //             mip_level: 0,
+        //             origin: Origin3d { x: 0, y: 0, z: 0 },
+        //             aspect: wgpu::TextureAspect::All,
+        //         },
+        //         &buf,
+        //         ImageDataLayout {
+        //             offset: 0,
+        //             bytes_per_row: Some(width as u32 * 4),
+        //             rows_per_image: Some(height as u32),
+        //         },
+        //         size,
+        //     );
+        //     dbg!("hello");
+
+        //     state.queue.submit(None);
+        //     // let mut encoder = state.device.create_command_encoder(&CommandEncoderDescriptor::default());
+
+        //     // encoder.write
+
+        //     rgba_texture.create_view(&TextureViewDescriptor {
+        //         aspect: wgpu::TextureAspect::All,
+        //         ..Default::default()
+        //     })
+        // };
 
         let view = state.texture.create_view(&TextureViewDescriptor::default());
 
@@ -131,7 +187,7 @@ impl StateImage {
         });
 
         Self {
-            state: SendState(state),
+            state,
             cpu_side_data: None,
             bind_group: bind_group.into(),
             vertex_buffer: vertex_buffer.into(),
@@ -199,7 +255,9 @@ fn queue(
 
     let msaa_key = SpritePipelineKey::from_msaa_samples(1);
 
-    let Some(view_binding) = view_uniforms.uniforms.binding() else { return };
+    let Some(view_binding) = view_uniforms.uniforms.binding() else {
+        return;
+    };
 
     let view_bind_group = render_device.create_bind_group(
         Some("sprite_view_bind_group"),
@@ -207,7 +265,7 @@ fn queue(
         &[BindGroupEntry {
             binding: 0,
             resource: view_binding,
-        }]
+        }],
     );
 
     view_uniforms_bindgroup.0 = Some(view_bind_group);
@@ -217,9 +275,12 @@ fn queue(
         for &visible in &visible_ents.entities {
             if let Ok(isp_image) = isp_images.get(visible) {
                 let positions: [[f32; 3]; 4] = QUAD_VERTEX_POSITIONS.map(|quad_pos| {
-                    isp_image.global
+                    isp_image
+                        .global
                         .transform_point(
-                            ((quad_pos - isp_image.image_settings.anchor) * isp_image.image_settings.size).extend(0.),
+                            ((quad_pos - isp_image.image_settings.anchor)
+                                * isp_image.image_settings.size)
+                                .extend(0.),
                         )
                         .into()
                 });
@@ -231,17 +292,18 @@ fn queue(
                 if isp_image.image_settings.flip_y {
                     uvs = [uvs[3], uvs[2], uvs[1], uvs[0]];
                 }
-                
-                let verts = QUAD_INDICES.map(|i|{
-                    SpriteVertex {
-                        position: positions[i],
-                        uv: uvs[i].into(),
-                    }
-                });
-                
 
-                render_queue.write_buffer(&isp_image.vertex_buffer, 0, bytemuck::cast_slice(&verts));
-                
+                let verts = QUAD_INDICES.map(|i| SpriteVertex {
+                    position: positions[i],
+                    uv: uvs[i].into(),
+                });
+
+                render_queue.write_buffer(
+                    &isp_image.vertex_buffer,
+                    0,
+                    bytemuck::cast_slice(&verts),
+                );
+
                 phase.add(Transparent2d {
                     sort_key: FloatOrd(isp_image.global.translation().z),
                     entity: isp_image.entity,

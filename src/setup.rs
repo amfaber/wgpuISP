@@ -1,13 +1,12 @@
 use gpwgpu::{
-    automatic_buffers::{register, AllOperations},
-    shaderpreprocessor::{ShaderProcessor, ShaderError},
+    automatic_buffers::{AllOperations, Operation},
+    shaderpreprocessor::ShaderProcessor,
     utils::{DebugBundle, FullComputePass, InspectBuffer},
     wgpu::{Device, Extent3d, Queue, Texture, TextureDescriptor, TextureDimension, TextureUsages},
 };
 
 use crate::operations::{
-    create_to_texture, AutoWhiteBalance, BlackLevel, Buffers, Debayer,
-    ISPParams, PreserveRaw, RGBSpaceOperations,
+    create_to_texture, AutoWhiteBalance, BlackLevel, Buffers, Debayer, ISPParams, PreserveRaw, RGBSpaceOperations, StateError, PT
 };
 
 #[derive(Debug, Clone)]
@@ -24,25 +23,23 @@ impl Params {
     }
 }
 
-type StateError = ShaderError;
-
 pub struct State<'a> {
     pub device: &'a Device,
     pub queue: &'a Queue,
     pub params: Params,
     pub to_texture: FullComputePass,
     pub texture: Texture,
-    pub sequential: AllOperations<Params, Buffers, StateError, ISPParams>,
+    pub sequential: AllOperations<PT>,
 }
 
 impl<'a> State<'a> {
     pub fn new(device: &'a Device, queue: &'a Queue, params: Params) -> Result<Self, StateError> {
         let operations = vec![
-            register::<BlackLevel>(),
-            register::<AutoWhiteBalance>(),
-            register::<Debayer>(),
-            register::<RGBSpaceOperations>(),
-            register::<PreserveRaw>(),
+            Operation::new::<BlackLevel>(),
+            Operation::new::<AutoWhiteBalance>(),
+            Operation::new::<Debayer>(),
+            Operation::new::<RGBSpaceOperations>(),
+            Operation::new::<PreserveRaw>(),
         ];
 
         let mut sequential = AllOperations::new(&params, operations)?;
@@ -126,3 +123,11 @@ pub fn make_debug_bundle<'a>(state: &'a State<'a>) -> DebugBundle<'a> {
         create_py: true,
     }
 }
+
+// fn compile_check<T: Send + Sync>(){
+//     fn test<T: Send>(){
+
+//     }
+
+//     test::<State>();
+// }

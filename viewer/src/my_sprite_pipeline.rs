@@ -68,18 +68,6 @@ impl FromWorld for SpritePipeline {
                 },
                 count: None,
             }],
-            // &BindGroupLayoutDescriptor {
-            // entries: &[BindGroupLayoutEntry {
-            //     binding: 0,
-            //     visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
-            //     ty: BindingType::Buffer {
-            //         ty: BufferBindingType::Uniform,
-            //         has_dynamic_offset: true,
-            //         min_binding_size: Some(ViewUniform::min_size()),
-            //     },
-            //     count: None,
-            // }],
-            // label: Some("sprite_view_layout"),
         );
 
         let material_layout = render_device.create_bind_group_layout(
@@ -101,8 +89,7 @@ impl FromWorld for SpritePipeline {
                     ty: BindingType::Sampler(SamplerBindingType::Filtering),
                     count: None,
                 },
-            ], // entries: ,
-               // label: Some("sprite_material_layout"),
+            ],
         );
         let dummy_white_gpu_image = {
             let image = Image::default();

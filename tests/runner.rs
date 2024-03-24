@@ -1,4 +1,4 @@
-use glam::{Vec4, Mat4};
+use glam::Mat4;
 use gpwgpu::{
     bytemuck,
     utils::{default_device, DebugEncoder},
@@ -6,18 +6,17 @@ use gpwgpu::{
 };
 use std::time::Instant;
 use wgpu_isp::{
-    operations::{BlackLevelPush, Buffers, SHADERS, ISPParams, AutoWhiteBalancePush, DebayerPush},
+    operations::{AutoWhiteBalancePush, BlackLevelPush, Buffers, DebayerPush, ISPParams, SHADERS},
     setup::{Params, State},
 };
 
 #[allow(unused)]
 use wgpu_isp::setup::make_debug_bundle;
 
-
 #[test]
 fn runner() {
     let (device, queue) = default_device().block_on().unwrap();
-    
+
     let params = Params {
         width: 1920,
         height: 1080,
@@ -34,9 +33,7 @@ fn runner() {
             alpha: 0.0,
             beta: 0.0,
         },
-        auto_white_balance_push: AutoWhiteBalancePush{
-            gain: 1.0,
-        },
+        auto_white_balance_push: AutoWhiteBalancePush { gain: 1.0 },
         gamma_push: wgpu_isp::operations::GammaPush {
             gain: 1.,
             gamma: 1.,
@@ -46,7 +43,7 @@ fn runner() {
         },
     };
 
-    let state = State::new(&device, &queue, params).unwrap();
+    let mut state = State::new(&device, &queue, params).unwrap();
 
     let data = std::fs::read("tests/test.RAW").unwrap();
 
@@ -55,19 +52,19 @@ fn runner() {
         .map(|chunk| u16::from_ne_bytes(chunk.try_into().unwrap()) as f32)
         .collect::<Vec<_>>();
 
-    let input_buf = state.sequential.buffers.get_from_any(Buffers::Raw);
 
     let now = Instant::now();
     for _ in 0..1000 {
+        let input_buf = state.sequential.buffers.get_from_any(Buffers::Raw);
         queue.write_buffer(input_buf, 0, bytemuck::cast_slice(&data));
 
         let mut encoder = DebugEncoder::new(&device);
-        
+
         // encoder.set_debug_bundle(make_debug_bundle(&state));
         // encoder.activate();
-        
+
         state.sequential.execute(&mut encoder, &isp_params);
-        
+
         // encoder.inspect_buffers().unwrap();
 
         device.poll(gpwgpu::wgpu::MaintainBase::Wait);
@@ -78,7 +75,6 @@ fn runner() {
     let mut encoder = DebugEncoder::new(&device);
     state.to_texture.execute(&mut encoder, &[]);
     encoder.submit(&state.queue);
-    
 
     // let retrieved = read_buffer::<f32>(&device, output_buf, 0, None);
 }

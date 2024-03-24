@@ -164,10 +164,10 @@ fn watch_for_shader_changes(
             };
             let params = Params {
                 shader_processor,
-                ..state.state.0.params
+                ..state.state.params
             };
 
-            let new_state = match state.state.0.reload(params) {
+            let new_state = match state.state.reload(params) {
                 Ok(state) => state,
                 Err(e) => {
                     dbg!(e);
@@ -178,7 +178,6 @@ fn watch_for_shader_changes(
 
             let old_input = state
                 .state
-                .0
                 .sequential
                 .buffers
                 .get_from_any(wgpu_isp::operations::Buffers::Raw);
@@ -275,12 +274,12 @@ enum FrameChange {
     Reload,
 }
 
-fn re_execute(mut query: Query<(&ParamsComponent, &mut ShouldExecute, &StateImage)>) {
-    for (params, mut should_execute, state) in &mut query {
+fn re_execute(mut query: Query<(&ParamsComponent, &mut ShouldExecute, &mut StateImage)>) {
+    for (params, mut should_execute, mut state) in &mut query {
         if !should_execute.0 {
             continue;
         }
-        let state = &state.state.0;
+        let state = &mut state.state;
 
         let mut encoder = DebugEncoder::new(&state.device);
 
@@ -467,7 +466,7 @@ fn new_input(
                 should_execute.as_mut().unwrap().0 = true;
 
                 let state = state_image.as_ref().unwrap();
-                state.state.0.write_to_input(&data);
+                state.state.write_to_input(&data);
             }
         }
 
@@ -490,7 +489,7 @@ fn ui(
         egui::ScrollArea::vertical().show(ui, |ui| {
             for (mut params, mut should_execute, mut ui_state, mut new_input) in &mut query {
                 input_line(ui, &mut new_input, &mut ui_state);
-                
+
                 json_line(ui, &mut ui_state, &mut params, &mut should_execute);
 
                 should_execute.0 |= ui_state.full_ui.show(ui, &mut params.0);

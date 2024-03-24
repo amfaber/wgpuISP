@@ -2,7 +2,7 @@ use std::mem::size_of;
 
 use bytemuck::bytes_of;
 use gpwgpu::{
-    automatic_buffers::{AbstractBuffer, MemoryReq, SequentialOperation},
+    automatic_buffers::{AbstractBuffer, MemoryReq, PipelineArgs, PipelineError, PipelineParams, PipelineTypes, SequentialOperation},
     bytemuck,
     operations::reductions::{InputType, MeanReduce},
     shaderpreprocessor::{ShaderError, ShaderSpecs},
@@ -37,8 +37,22 @@ pub enum Buffers {
     RGB,
 }
 
+pub struct PT;
+
+pub type StateError = ShaderError;
+
+impl PipelineTypes for PT{
+    type Params = Params;
+
+    type Buffer = Buffers;
+
+    type Error = StateError;
+
+    type Args = ISPParams;
+}
+
 impl Buffers {
-    fn init(self, params: &Params) -> AbstractBuffer<Self> {
+    fn init(self, params: &Params) -> AbstractBuffer<PT> {
         let name = self;
         match self {
             Buffers::Raw => AbstractBuffer {
@@ -112,19 +126,20 @@ pub struct BlackLevelPush {
 }
 
 impl SequentialOperation for BlackLevel {
-    type Params = Params;
-    type BufferEnum = Buffers;
-    type Error = ShaderError;
-    type Args = ISPParams;
+    type PT = PT;
+    // type Params = Params;
+    // type BufferEnum = Buffers;
+    // type Error = ShaderError;
+    // type Args = ISPParams;
 
-    fn enabled(_params: &Self::Params) -> bool
+    fn enabled(_params: &PipelineParams<Self>) -> bool
     where
         Self: Sized,
     {
         true
     }
 
-    fn buffers(params: &Self::Params) -> Vec<AbstractBuffer<Self::BufferEnum>>
+    fn buffers(params: &PipelineParams<Self>) -> Vec<AbstractBuffer<PT>>
     where
         Self: Sized,
     {
@@ -133,9 +148,9 @@ impl SequentialOperation for BlackLevel {
 
     fn create(
         device: &gpwgpu::wgpu::Device,
-        params: &Self::Params,
-        buffers: &gpwgpu::automatic_buffers::BufferSolution<Self::BufferEnum>,
-    ) -> Result<Self, Self::Error>
+        params: &PipelineParams<Self>,
+        buffers: &gpwgpu::automatic_buffers::BufferSolution<PT>,
+    ) -> Result<Self, PipelineError<Self>>
     where
         Self: Sized,
     {
@@ -168,8 +183,8 @@ impl SequentialOperation for BlackLevel {
     fn execute(
         &mut self,
         encoder: &mut gpwgpu::utils::Encoder,
-        _buffers: &gpwgpu::automatic_buffers::BufferSolution<Self::BufferEnum>,
-        args: &Self::Args,
+        _buffers: &gpwgpu::automatic_buffers::BufferSolution<PT>,
+        args: &PipelineArgs<Self>,
     ) {
         // if !args.black_level.enabled {
         //     return;
@@ -205,19 +220,20 @@ pub struct AutoWhiteBalancePush {
 }
 
 impl SequentialOperation for AutoWhiteBalance {
-    type Params = Params;
-    type BufferEnum = Buffers;
-    type Error = ShaderError;
-    type Args = ISPParams;
+    type PT = PT;
+    // type Params = Params;
+    // type BufferEnum = Buffers;
+    // type Error = ShaderError;
+    // type Args = ISPParams;
 
-    fn enabled(_params: &Self::Params) -> bool
+    fn enabled(_params: &PipelineParams<Self>) -> bool
     where
         Self: Sized,
     {
         true
     }
 
-    fn buffers(params: &Self::Params) -> Vec<AbstractBuffer<Self::BufferEnum>>
+    fn buffers(params: &PipelineParams<Self>) -> Vec<AbstractBuffer<PT>>
     where
         Self: Sized,
     {
@@ -231,9 +247,9 @@ impl SequentialOperation for AutoWhiteBalance {
 
     fn create(
         device: &gpwgpu::wgpu::Device,
-        params: &Self::Params,
-        buffers: &gpwgpu::automatic_buffers::BufferSolution<Self::BufferEnum>,
-    ) -> Result<Self, Self::Error>
+        params: &PipelineParams<Self>,
+        buffers: &gpwgpu::automatic_buffers::BufferSolution<PT>,
+    ) -> Result<Self, PipelineError<Self>>
     where
         Self: Sized,
     {
@@ -302,8 +318,8 @@ impl SequentialOperation for AutoWhiteBalance {
     fn execute(
         &mut self,
         encoder: &mut gpwgpu::utils::Encoder,
-        _buffers: &gpwgpu::automatic_buffers::BufferSolution<Self::BufferEnum>,
-        args: &Self::Args,
+        _buffers: &gpwgpu::automatic_buffers::BufferSolution<PT>,
+        args: &PipelineArgs<Self>,
     ) {
         self.align.execute(encoder, &[]);
         self.mean.execute(encoder, self.reduction_length);
@@ -323,12 +339,13 @@ pub struct DebayerPush {
 }
 
 impl SequentialOperation for Debayer {
-    type Params = Params;
-    type BufferEnum = Buffers;
-    type Error = ShaderError;
-    type Args = ISPParams;
+    type PT = PT;
+    // type Params = Params;
+    // type BufferEnum = Buffers;
+    // type Error = ShaderError;
+    // type Args = ISPParams;
 
-    fn enabled(_params: &Self::Params) -> bool
+    fn enabled(_params: &PipelineParams<Self>) -> bool
     where
         Self: Sized,
     {
@@ -336,8 +353,8 @@ impl SequentialOperation for Debayer {
     }
 
     fn buffers(
-        params: &Self::Params,
-    ) -> Vec<gpwgpu::automatic_buffers::AbstractBuffer<Self::BufferEnum>>
+        params: &PipelineParams<Self>,
+    ) -> Vec<gpwgpu::automatic_buffers::AbstractBuffer<PT>>
     where
         Self: Sized,
     {
@@ -349,9 +366,9 @@ impl SequentialOperation for Debayer {
 
     fn create(
         device: &gpwgpu::wgpu::Device,
-        params: &Self::Params,
-        buffers: &gpwgpu::automatic_buffers::BufferSolution<Self::BufferEnum>,
-    ) -> Result<Self, Self::Error>
+        params: &PipelineParams<Self>,
+        buffers: &gpwgpu::automatic_buffers::BufferSolution<PT>,
+    ) -> Result<Self, PipelineError<Self>>
     where
         Self: Sized,
     {
@@ -382,8 +399,8 @@ impl SequentialOperation for Debayer {
     fn execute(
         &mut self,
         encoder: &mut gpwgpu::utils::Encoder,
-        _buffers: &gpwgpu::automatic_buffers::BufferSolution<Self::BufferEnum>,
-        args: &Self::Args,
+        _buffers: &gpwgpu::automatic_buffers::BufferSolution<PT>,
+        args: &PipelineArgs<Self>,
     ) {
         // let push = if args.debayer.enabled { 1i32 } else { 0 };
         self.pass
@@ -430,19 +447,20 @@ pub struct GammaPush {
 }
 
 impl SequentialOperation for RGBSpaceOperations {
-    type Params = Params;
-    type BufferEnum = Buffers;
-    type Error = ShaderError;
-    type Args = ISPParams;
+    type PT = PT;
+    // type Params = Params;
+    // type BufferEnum = Buffers;
+    // type Error = ShaderError;
+    // type Args = ISPParams;
 
-    fn enabled(_params: &Self::Params) -> bool
+    fn enabled(_params: &PipelineParams<Self>) -> bool
     where
         Self: Sized,
     {
         true
     }
 
-    fn buffers(params: &Self::Params) -> Vec<AbstractBuffer<Self::BufferEnum>>
+    fn buffers(params: &PipelineParams<Self>) -> Vec<AbstractBuffer<PT>>
     where
         Self: Sized,
     {
@@ -451,9 +469,9 @@ impl SequentialOperation for RGBSpaceOperations {
 
     fn create(
         device: &gpwgpu::wgpu::Device,
-        params: &Self::Params,
-        buffers: &gpwgpu::automatic_buffers::BufferSolution<Self::BufferEnum>,
-    ) -> Result<Self, Self::Error>
+        params: &PipelineParams<Self>,
+        buffers: &gpwgpu::automatic_buffers::BufferSolution<PT>,
+    ) -> Result<Self, PipelineError<Self>>
     where
         Self: Sized,
     {
@@ -483,8 +501,8 @@ impl SequentialOperation for RGBSpaceOperations {
     fn execute(
         &mut self,
         encoder: &mut gpwgpu::utils::Encoder,
-        _buffers: &gpwgpu::automatic_buffers::BufferSolution<Self::BufferEnum>,
-        args: &Self::Args,
+        _buffers: &gpwgpu::automatic_buffers::BufferSolution<PT>,
+        args: &PipelineArgs<Self>,
     ) {
         let mut push = bytes_of(&args.color_correction_push).to_vec();
         push.extend_from_slice(bytes_of(&args.gamma_push));
@@ -496,19 +514,20 @@ impl SequentialOperation for RGBSpaceOperations {
 pub struct PreserveRaw;
 
 impl SequentialOperation for PreserveRaw {
-    type Params = Params;
-    type BufferEnum = Buffers;
-    type Error = ShaderError;
-    type Args = ISPParams;
+    type PT = PT;
+    // type Params = Params;
+    // type BufferEnum = Buffers;
+    // type Error = ShaderError;
+    // type Args = ISPParams;
 
-    fn enabled(_params: &Self::Params) -> bool
+    fn enabled(_params: &PipelineParams<Self>) -> bool
     where
         Self: Sized,
     {
         true
     }
 
-    fn buffers(params: &Self::Params) -> Vec<AbstractBuffer<Self::BufferEnum>>
+    fn buffers(params: &PipelineParams<Self>) -> Vec<AbstractBuffer<PT>>
     where
         Self: Sized,
     {
@@ -517,9 +536,9 @@ impl SequentialOperation for PreserveRaw {
 
     fn create(
         _device: &gpwgpu::wgpu::Device,
-        _params: &Self::Params,
-        _buffers: &gpwgpu::automatic_buffers::BufferSolution<Self::BufferEnum>,
-    ) -> Result<Self, Self::Error>
+        _params: &PipelineParams<Self>,
+        _buffers: &gpwgpu::automatic_buffers::BufferSolution<PT>,
+    ) -> Result<Self, PipelineError<Self>>
     where
         Self: Sized,
     {
@@ -529,8 +548,8 @@ impl SequentialOperation for PreserveRaw {
     fn execute(
         &mut self,
         _encoder: &mut gpwgpu::utils::Encoder,
-        _buffers: &gpwgpu::automatic_buffers::BufferSolution<Self::BufferEnum>,
-        _args: &Self::Args,
+        _buffers: &gpwgpu::automatic_buffers::BufferSolution<PT>,
+        _args: &PipelineArgs<Self>,
     ) {
     }
 }

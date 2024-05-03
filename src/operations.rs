@@ -127,10 +127,6 @@ pub struct BlackLevelPush {
 
 impl SequentialOperation for BlackLevel {
     type PT = PT;
-    // type Params = Params;
-    // type BufferEnum = Buffers;
-    // type Error = ShaderError;
-    // type Args = ISPParams;
 
     fn enabled(_params: &PipelineParams<Self>) -> bool
     where
@@ -221,10 +217,6 @@ pub struct AutoWhiteBalancePush {
 
 impl SequentialOperation for AutoWhiteBalance {
     type PT = PT;
-    // type Params = Params;
-    // type BufferEnum = Buffers;
-    // type Error = ShaderError;
-    // type Args = ISPParams;
 
     fn enabled(_params: &PipelineParams<Self>) -> bool
     where
@@ -340,10 +332,6 @@ pub struct DebayerPush {
 
 impl SequentialOperation for Debayer {
     type PT = PT;
-    // type Params = Params;
-    // type BufferEnum = Buffers;
-    // type Error = ShaderError;
-    // type Args = ISPParams;
 
     fn enabled(_params: &PipelineParams<Self>) -> bool
     where
@@ -448,10 +436,6 @@ pub struct GammaPush {
 
 impl SequentialOperation for RGBSpaceOperations {
     type PT = PT;
-    // type Params = Params;
-    // type BufferEnum = Buffers;
-    // type Error = ShaderError;
-    // type Args = ISPParams;
 
     fn enabled(_params: &PipelineParams<Self>) -> bool
     where
@@ -515,10 +499,6 @@ pub struct PreserveRaw;
 
 impl SequentialOperation for PreserveRaw {
     type PT = PT;
-    // type Params = Params;
-    // type BufferEnum = Buffers;
-    // type Error = ShaderError;
-    // type Args = ISPParams;
 
     fn enabled(_params: &PipelineParams<Self>) -> bool
     where
